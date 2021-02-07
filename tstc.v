@@ -66,10 +66,6 @@ fn tokenizer(input string) []Token {
 }
 fn parser(tokens []Token) []ASTNode {
 	mut ast:=[]ASTNode{}
-	fn walk() {
-		println('walk')
-	}
-	walk()
 	return ast
 }
 fn transformer(ast []ASTNode) []ASTNode {
