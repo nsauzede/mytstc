@@ -24,7 +24,7 @@ local ASTNode:type=@record{
     type:string,
     u:union{
         Program:record{
-            body:vector(ASTNode),
+            body:vector(*ASTNode),
         },
         NumberLiteral:record{
             value:string,
@@ -34,13 +34,13 @@ local ASTNode:type=@record{
         },
         CallExpression:record{
             name:string,
-            params:vector(ASTNode),
+            params:vector(*ASTNode),
         },
         ExpressionStatement:record{
             expression:Expression,
         },
     },
-    _context:pointer(vector(ASTNode)),
+    _context:pointer(vector(*ASTNode)),
 }
 local function print_AST_R(node: ASTNode, nest: integer)
     for i=0,<nest do
@@ -223,29 +223,29 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
     if node.type=='NumberLiteral' then
         if parent._context~=nilptr then
             print('Pushing NumberLiteral !! parent=',parent, 'context=', parent._context)
-            local ctx:*vector(ASTNode)=$parent._context
-            ctx:push(ASTNode{
+            local ctx:*vector(*ASTNode)=$parent._context
+            ctx:push(gc_allocator:new(ASTNode{
                 type='NumberLiteral',
                 u={
                     NumberLiteral={
                         value=node.u.NumberLiteral.value,
                     },
                 },
-            })
+            }))
             print('Done')
         end
     end
     if node.type=='StringLiteral' then
         print('Pushing StringLiteral !! parent=',parent, 'context=', parent._context)
-        local ctx:*vector(ASTNode)=$parent._context
-        ctx:push(ASTNode{
+        local ctx:*vector(*ASTNode)=$parent._context
+        ctx:push(gc_allocator:new(ASTNode{
             type='StringLiteral',
             u={
                 StringLiteral={
                     value=node.u.StringLiteral.value,
                 },
             },
-        })
+        }))
         print('Done')
     end
     if node.type=='CallExpression' then
@@ -271,7 +271,7 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
         end]]
         if parent._context~=nilptr then
             print('Pushing CallExpression !! parent=',parent, 'context=', parent._context)
-            local ctx:*vector(ASTNode)=$parent._context
+            local ctx:*vector(*ASTNode)=$parent._context
             ctx:push(expression)
             print('Done')
         end
@@ -279,11 +279,11 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
     if node.type == 'Program' then
         --traverseArray(node.body, node)
         print('traversing array body for program')
-        for i=0,<#node.body do traverseNode(node.body[i], node) end
+        for i=0,<#node.u.Program.body do traverseNode(node.u.Program.body[i], node) end
     elseif node.type == 'CallExpression' then
         --traverseArray(node.params, node)
         print('traversing array params for callexpr')
-        for i=0,<#node.params do traverseNode(node.params[i], node) end
+        for i=0,<#node.u.CallExpression.params do traverseNode(node.u.CallExpression.params[i], node) end
     elseif node.type == 'NumberLiteral' or node.type == 'StringLiteral' then
         -- nothing special
         print('doing nothing special for callexpr')
@@ -298,7 +298,7 @@ local function transformer(ast: ASTNode):ASTNode
     local newAst = ASTNode{
         type='Program',
     }
-    ast._context = &newAst.body
+    ast._context = &newAst.u.Program.body
     traverser(ast)
     return newAst
 end

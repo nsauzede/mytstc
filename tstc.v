@@ -7,6 +7,9 @@ struct ASTNode {
 	@type string
 	value string
 }
+fn print_ast(ast []ASTNode) {
+
+}
 fn is_space(c byte) bool {
 	return c==` ` || c==`\n`
 }
@@ -63,15 +66,30 @@ fn parser(tokens []Token) []ASTNode {
 	ast:=[]ASTNode{}
 	return ast
 }
+fn transformer(ast []ASTNode) []ASTNode {
+	return ast
+}
+fn code_generator(ast []ASTNode) string {
+	return ''
+}
+fn compiler(input string) string {
+	println('input=$input')
+	tokens:=tokenizer(input)
+	ast:=parser(tokens)
+	newast:=transformer(ast)
+	output:=code_generator(newast)
+	for i:=0;i<tokens.len;i++ {
+		println('${tokens[i].@type}\t${tokens[i].value}')
+	}
+	print_ast(ast)
+	return output
+}
 fn main() {
 	source:="
     (add 2 2)
     (subtract 4 2)
     (add 2 (subtract 4 2))
     "
-	tokens:=tokenizer(source)
-	ast:=parser(tokens)
-	for i:=0;i<tokens.len;i++ {
-		println('${tokens[i].@type}\t${tokens[i].value}')
-	}
+	output:=compiler(source)
+	println('output=$output')
 }
