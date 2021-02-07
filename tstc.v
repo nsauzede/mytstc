@@ -8,7 +8,9 @@ struct ASTNode {
 	value string
 }
 fn print_ast(ast []ASTNode) {
-
+	for e in ast {
+		println('e=$e')
+	}
 }
 fn is_space(c byte) bool {
 	return c==` ` || c==`\n`
@@ -63,7 +65,11 @@ fn tokenizer(input string) []Token {
 	return tokens
 }
 fn parser(tokens []Token) []ASTNode {
-	ast:=[]ASTNode{}
+	mut ast:=[]ASTNode{}
+	fn walk() {
+		println('walk')
+	}
+	walk()
 	return ast
 }
 fn transformer(ast []ASTNode) []ASTNode {

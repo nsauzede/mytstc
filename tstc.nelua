@@ -40,7 +40,7 @@ local ASTNode:type=@record{
             expression:Expression,
         },
     },
-    _context:pointer(vector(*ASTNode)),
+    _context:*vector(*ASTNode),
 }
 local function print_AST_R(node: ASTNode, nest: integer)
     for i=0,<nest do
