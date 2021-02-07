@@ -124,7 +124,7 @@ local function tokenizer(input: string): vector(Token)
             continue
         end
         if is_number(c) then
-            local sb=stringbuilder
+            local sb:stringbuilder
             while is_number(c) do
                 sb:write_byte(c)
                 current=current+1
@@ -135,7 +135,7 @@ local function tokenizer(input: string): vector(Token)
             continue
         end
         if is_letter(c) then
-            local sb=stringbuilder
+            local sb:stringbuilder
             while is_letter(c) do
                 sb:write_byte(c)
                 current=current+1
@@ -156,14 +156,22 @@ local function parser(tokens: vector(Token)): ASTNode
             current=current+1
             return current,ASTNode{
                 type='NumberLiteral',
-                value=token.value,
+                u={
+                    NumberLiteral={
+                        value=token.value,
+                    },
+                },
             }
         end
         if token.type == 'string' then
             current=current+1
             return current,ASTNode{
                 type='StringLiteral',
-                value=token.value,
+                u={
+                    StringLiteral={
+                        value=token.value,
+                    },
+                },
             }
         end
         if token.type == 'paren' and token.value == '(' then
@@ -171,25 +179,24 @@ local function parser(tokens: vector(Token)): ASTNode
             token=tokens[current]
             local node = ASTNode{
                 type='CallExpression',
-                name=token.value,
+                u={
+                    CallExpression={
+                        name=token.value,
+                    },
+                },
             }
             current=current+1
             token=tokens[current]
             while token.type ~= 'paren' or (token.type == 'paren' and token.value ~= ')') do
                 local child:ASTNode
                 current,child=walk(current,tokens)
-                node.params:push(child)
+                node.u.CallExpression.params:push(child)
                 token=tokens[current]
             end
             current=current+1
             return current,node
         end
         error(string.format("Type error: `%s`", token.type))
-        current=current+1
-        return current,ASTNode{
-            type='SHOULDNOT',
-            value='HAPPEN'
-        }
     end
     local current=0
     local ast = ASTNode{
@@ -198,7 +205,7 @@ local function parser(tokens: vector(Token)): ASTNode
     while current<#tokens do
         local node:ASTNode
         current,node=walk(current,tokens)
-        ast.body:push(node)
+        ast.u.Program.body:push(node)
         --break
     end
     return ast
@@ -219,7 +226,11 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
             local ctx:*vector(ASTNode)=$parent._context
             ctx:push(ASTNode{
                 type='NumberLiteral',
-                value=node.value,
+                u={
+                    NumberLiteral={
+                        value=node.u.NumberLiteral.value,
+                    },
+                },
             })
             print('Done')
         end
@@ -229,19 +240,30 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
         local ctx:*vector(ASTNode)=$parent._context
         ctx:push(ASTNode{
             type='StringLiteral',
-            value=node.value,
+            u={
+                StringLiteral={
+                    value=node.u.StringLiteral.value,
+                },
+            },
         })
         print('Done')
     end
     if node.type=='CallExpression' then
         local expression=ASTNode{
-            type='CallExpression',
-            callee={
-                type='Identifier',
-                name=node.name,
-            }
+            type='ExpressionStatement',
+            u={
+                ExpressionStatement={
+                    expression={
+                        type="CallExpression",
+                        callee={
+                            type='Identifier',
+                            name=node.u.CallExpression.name,
+                        },
+                    },
+                },
+            },
         }
-        node._context = &expression.arguments
+        node._context = &expression.u.ExpressionStatement.expression.arguments
         --[[if parent.type ~= 'CallExpression' then
             expression=@record{
 
