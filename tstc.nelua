@@ -1,0 +1,191 @@
+require 'vector'
+require 'string'
+require 'stringbuilder'
+require 'allocators.arena'
+require 'C.stdio'
+require 'io'
+local Token:type=@record{
+    type:string,
+    value:string,
+}
+local Callee:type=@record{
+    type:string,
+    name:string,
+}
+-- TODO : turn exclusive fields into union
+local ASTNode:type=@record{
+    type:string,
+    value:string,               --NumberLiteral, StringLiteral
+    name:string,                --CallExpression
+    params:vector(ASTNode),     --CallExpression
+    body:vector(ASTNode),       --Program
+    expression:vector(ASTNode), --ExpressionStatement
+    callee:record{
+        type:string,
+        name:string,
+    },              --ExpressionStatement
+    arguments:vector(ASTNode),   --ExpressionStatement
+}
+local function print_AST_R(node: ASTNode, nest: integer)
+    for i=0,<nest do
+        --C.printf("\t")
+        io.stdout:write("\t")
+    end
+    C.printf("%s", node.type)
+    if node.type=='Program' then
+        print(' body=\\')
+        for i=0,<#node.body do
+            print_AST_R(node.body[i], nest + 1)
+        end
+    end
+    if node.type=='NumberLiteral' or node.type=='StringLiteral' then
+        C.printf(" value=%s\n", node.value)
+    end
+    if node.type=='CallExpression' then
+        C.printf(" name=%s", node.name)
+        --C.printf(" params=\\\n")
+        io.stdout:write(" params=\\\n")
+        for i=0,<#node.params do
+            print_AST_R(node.params[i], nest + 1)
+        end
+    end
+end
+local function print_AST(ast: ASTNode)
+    print_AST_R(ast, 0)
+end
+local function is_space(c:byte)
+    return c==' '_byte or c<='\n'_byte
+end
+local function is_number(c:byte)
+    return c>='0'_byte and c<='9'_byte
+end
+local function is_letter(c:byte)
+    return c>='a'_byte and c<='z'_byte
+end
+local function tokenizer(input: string): vector(Token)
+    local current=0
+    local tokens:vector(Token)
+    while current<#input do
+        local c=input.data[current]
+        if c=='('_byte then
+            tokens:push(Token{'paren','('})
+            current=current+1
+            continue
+        end
+        if c==')'_byte then
+            tokens:push(Token{'paren',')'})
+            current=current+1
+            continue
+        end
+        if is_space(c) then
+            current=current+1
+            continue
+        end
+        if is_number(c) then
+            local allocator: ArenaAllocator(256,1)
+            local sb=stringbuilder.make(&allocator)
+            while is_number(c) do
+                sb:write_byte(c)
+                current=current+1
+                c=input.data[current]
+            end
+            local value:stringview=sb
+            tokens:push(Token{'number',value})
+            continue
+        end
+        if is_letter(c) then
+            local allocator: ArenaAllocator(256,1)
+            local sb=stringbuilder.make(&allocator)
+            while is_letter(c) do
+                sb:write_byte(c)
+                current=current+1
+                c=input.data[current]
+            end
+            local value:stringview=sb
+            tokens:push(Token{'name',value})
+            continue
+        end
+        error(string.format("I don't know what this character is: `%c`", c))
+    end
+    return tokens
+end
+local function parser(tokens: vector(Token)): ASTNode
+    local function walk(current: integer, tokens:vector(Token))
+        local token = tokens[current]
+        if token.type == 'number' then
+            current=current+1
+            return current,ASTNode{
+                type='NumberLiteral',
+                value=token.value,
+            }
+        end
+        if token.type == 'string' then
+            current=current+1
+            return current,ASTNode{
+                type='StringLiteral',
+                value=token.value,
+            }
+        end
+        if token.type == 'paren' and token.value == '(' then
+            current=current+1
+            token=tokens[current]
+            local node = ASTNode{
+                type='CallExpression',
+                name=token.value,
+            }
+            current=current+1
+            token=tokens[current]
+            while token.type ~= 'paren' or (token.type == 'paren' and token.value ~= ')') do
+                local child:ASTNode
+                current,child=walk(current,tokens)
+                node.params:push(child)
+                token=tokens[current]
+            end
+            current=current+1
+            return current,node
+        end
+        error(string.format("Type error: `%s`", token.type))
+        current=current+1
+        return current,ASTNode{
+            type='SHOULDNOT',
+            value='HAPPEN'
+        }
+    end
+    local current=0
+    local ast = ASTNode{
+        'Program',
+    }
+    while current<#tokens do
+        local node:ASTNode
+        current,node=walk(current,tokens)
+        ast.body:push(node)
+        --break
+    end
+    return ast
+end
+local function transformer(ast: ASTNode):ASTNode
+    return ast
+end
+local function codeGenerator(ast: ASTNode):string
+    return "output code"
+end
+local function compiler(input: string):string
+    print('input=',input)
+    local tokens=tokenizer(input)
+    local ast=parser(tokens)
+    local newAst=transformer(ast)
+    local output=codeGenerator(newAst)
+    for t=0,<#tokens do
+        print(tokens[t].type,tokens[t].value)
+    end
+    print_AST(ast)
+    print_AST(newAst)
+    return output
+end
+local source=[[
+    (add 2 2)
+    (subtract 4 2)
+    (add 2 (subtract 4 2))
+    ]]
+local output=compiler(source)
+print(output)
