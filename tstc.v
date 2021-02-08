@@ -1,3 +1,4 @@
+import os
 import strings
 struct Token {
 	@type string
@@ -74,24 +75,49 @@ fn transformer(ast []ASTNode) []ASTNode {
 fn code_generator(ast []ASTNode) string {
 	return ''
 }
-fn compiler(input string) string {
-	println('input=$input')
-	tokens:=tokenizer(input)
-	ast:=parser(tokens)
-	newast:=transformer(ast)
-	output:=code_generator(newast)
+fn print_tokens(tokens []Token) {
 	for i:=0;i<tokens.len;i++ {
 		println('${tokens[i].@type}\t${tokens[i].value}')
 	}
+}
+const (
+	print_input		=0x01
+	print_tokens	=0x02
+	print_ast		=0x04
+	print_newast	=0x08
+	print_output	=0x10
+)
+fn compiler(input string, flags int) string {
+	if 0!=flags&print_input {
+		println('input=$input')
+	}
+	tokens:=tokenizer(input)
+	//print_tokens(tokens)
+	ast:=parser(tokens)
 	print_ast(ast)
+	newast:=transformer(ast)
+	output:=code_generator(newast)
+	println('output=$output')
 	return output
 }
 fn main() {
+	mut flags:=0
+	println('before flags=$flags')
+	for a in os.args {
+		if a=='--print-tokens' {
+			flags|=print_input
+		}
+		println('a=$a')
+	}
+	println('before flags=$flags')
+	if 0!=flags&print_input {
+		println('Will print inputs')
+	}
+	//println('args=$args')
 	source:="
     (add 2 2)
     (subtract 4 2)
     (add 2 (subtract 4 2))
     "
-	output:=compiler(source)
-	println('output=$output')
+	output:=compiler(source,flags)
 }
