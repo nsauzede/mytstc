@@ -3,7 +3,7 @@ require 'string'
 require 'stringbuilder'
 require 'C.stdio'
 require 'io'
-
+require 'arg'
 local Token:type=@record{
     type:string,
     value:string,
@@ -73,6 +73,12 @@ local function print_AST_R(node: ASTNode, nest: integer)
 end
 
 local function print_AST(ast: ASTNode) print_AST_R(ast, 0) end
+
+local function print_tokens(tokens:vector(Token))
+    for t=0,<#tokens do
+        print(tokens[t].type,tokens[t].value)
+    end
+end
 
 local function is_space(c:byte) return c==' '_byte or c<='\n'_byte end
 local function is_number(c:byte) return c>='0'_byte and c<='9'_byte end
@@ -297,30 +303,25 @@ local function codeGenerator(node: ASTNode):string
     else
         error(string.format("Code gen Type error: `%s`", node.type))
     end
-    --sb:write_byte(65)
     local output:stringview=sb
     return output
-    --return stringview(sb)
 end
 
-local function print_tokens(tokens:vector(Token))
-    --print("Found ",#tokens," tokens")
-    for t=0,<#tokens do
-        print(tokens[t].type,tokens[t].value)
-        --io.stdout:writef("%s",tokens[t].type)
-        --io.stdout:writef("%s",tokens[t].value)
-    end
-end
-
-local function compiler(input: string):string
-    print('input=\\\n',input)
-    --io.stdout:writef("input=\\\n%s",input)
+local Flags = @enum {
+    none = 0,
+    print_input,
+    print_tokens,
+    print_ast,
+    print_newast,
+    print_output,
+}
+local function compiler(input: string, flags: integer):string
     local tokens=tokenizer(input)
-    --print_tokens(tokens)
+    if 0~=flags&Flags.print_tokens then print_tokens(tokens)end
     local ast=parser(tokens)
-    --print_AST(ast)
+    if 0~=flags&Flags.print_ast then print_AST(ast)end
     local newAst=transformer(ast)
-    --print_AST(newAst)
+    if 0~=flags&Flags.print_newast then print_AST(newAst)end
     local output=codeGenerator(newAst)
     return output
 end
@@ -330,5 +331,18 @@ local source=[[
     (subtract 4 2)
     (add 2 (subtract 4 2))
 ]]
-local output=compiler(source)
-io.stdout:writef("output=\\\n%s",output)
+local flags=0--|Flags.print_tokens
+for i=1,#arg do
+    if arg[i]=='--print-input' then flags=flags|Flags.print_input end
+    if arg[i]=='--print-tokens' then flags=flags|Flags.print_tokens end
+end
+--[[print('flags=',flags)
+print(Flags.none)
+print(Flags.print_input)
+print(Flags.print_tokens)
+print(Flags.print_ast)
+print(Flags.print_newast)
+print(Flags.print_output)]]
+if 0~=flags&Flags.print_input then io.stdout:writef("input=\\\n%s",source)end
+local output=compiler(source, flags)
+if 0~=flags&Flags.print_output then io.stdout:writef("output=\\\n%s",output)end

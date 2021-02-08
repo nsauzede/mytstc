@@ -1,3 +1,4 @@
+module main
 import os
 import strings
 struct Token {
@@ -88,36 +89,44 @@ const (
 	print_output	=0x10
 )
 fn compiler(input string, flags int) string {
-	if 0!=flags&print_input {
-		println('input=$input')
-	}
 	tokens:=tokenizer(input)
-	//print_tokens(tokens)
+	if 0!=flags&print_tokens {print_tokens(tokens)}
 	ast:=parser(tokens)
-	print_ast(ast)
+	if 0!=flags&print_ast {print_ast(ast)}
 	newast:=transformer(ast)
+	if 0!=flags&print_newast {print_ast(newast)}
 	output:=code_generator(newast)
-	println('output=$output')
 	return output
 }
+fn usage() {
+	prog:=os.args[0]
+	println('Usage: $prog [options]')
+	println('')
+	println('Options:')
+	println('   --help\t\tDisplay this information.')
+	println('   --print-input\tDisplay the source input.')
+	println('   --print-tokens\tDisplay the tokens.')
+	println('   --print-ast\t\tDisplay the ast.')
+	println('   --print-newast\tDisplay the newast.')
+	println('   --print-output\tDisplay the generated output.')
+	println('')
+	println('For more information, please see:')
+	println('https://github.com/nsauzede/mytstc')
+}
 fn main() {
-	mut flags:=0
-	println('before flags=$flags')
-	for a in os.args {
-		if a=='--print-tokens' {
-			flags|=print_input
-		}
-		println('a=$a')
-	}
-	println('before flags=$flags')
-	if 0!=flags&print_input {
-		println('Will print inputs')
-	}
-	//println('args=$args')
-	source:="
-    (add 2 2)
+	mut flags:=print_input|print_tokens|print_output
+	source:="    (add 2 2)
     (subtract 4 2)
-    (add 2 (subtract 4 2))
-    "
+    (add 2 (subtract 4 2))"
+	for a in os.args {
+		if a=='--help'{usage()exit(0)}
+		if a=='--print-input'{flags|=print_input}
+		if a=='--print-tokens'{flags|=print_tokens}
+		if a=='--print-ast'{flags|=print_ast}
+		if a=='--print-newast'{flags|=print_newast}
+		if a=='--print-output'{flags|=print_output}
+	}
+	if 0!=flags&print_input{println('input=\\\n$source')}
 	output:=compiler(source,flags)
+	if 0!=flags&print_output{println('output=\\\n$output')}
 }
