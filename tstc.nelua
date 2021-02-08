@@ -33,8 +33,15 @@ ASTNode=@record{
             params:vector(*ASTNode),
         },
         ExpressionStatement:record{
-            expression:Expression,
+            expression:*ASTNode,
         },
+        Call:record{
+            callee:record{
+                type:string,
+                name:string,
+            },
+            arguments:vector(*ASTNode),
+        }
     },
     _context:*vector(*ASTNode),
 }
@@ -60,13 +67,27 @@ local function print_AST_R(node: ASTNode, nest: integer)
             print_AST_R(node.u.CallExpression.params[i], nest + 1)
         end
     end
+--[[
+            ExpressionStatement:record{
+            expression:*ASTNode,
+        },
+        Call:record{
+            callee:record{
+                type:string,
+                name:string,
+            },
+            arguments:vector(*ASTNode),
+        }
+]]
     if node.type=='ExpressionStatement' then
-        io.stdout:writef(" expression type=%s",node.u.ExpressionStatement.expression.type)
-        io.stdout:writef(" callee type=%s",node.u.ExpressionStatement.expression.callee.type)
-        io.stdout:writef(" name=%s",node.u.ExpressionStatement.expression.callee.name)
+        print_AST_R(node.u.ExpressionStatement.expression, nest + 1)
+    end
+    if node.type=='Call' then
+        io.stdout:writef(" callee type=%s",node.u.Call.callee.type)
+        io.stdout:writef(" name=%s",node.u.Call.callee.name)
         io.stdout:write(" arguments=\\\n")
-        for i=0,<#node.u.ExpressionStatement.expression.arguments do
-            print_AST_R(node.u.ExpressionStatement.expression.arguments[i], nest + 1)
+        for i=0,<#node.u.Call.arguments do
+            print_AST_R(node.u.Call.arguments[i], nest + 1)
         end
     end
 end
@@ -222,23 +243,35 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
     end
     if node.type=='CallExpression' then
         local expression=gc_allocator:new(ASTNode{
-            type='ExpressionStatement',
+            type='Call',
             u={
-                ExpressionStatement={
-                    expression={
-                        type="CallExpression",
-                        callee={
-                            type='Identifier',
-                            name=node.u.CallExpression.name,
-                        },
+                Call={
+                    callee={
+                        type='Identifier',
+                        name=node.u.CallExpression.name,
                     },
                 },
             },
         })
-        node._context = &expression.u.ExpressionStatement.expression.arguments
-        if parent._context~=nilptr then
-            local ctx:*vector(*ASTNode)=&$parent._context
-            ctx:push(expression)
+        node._context = &expression.u.Call.arguments
+        if parent.type ~= 'CallExpression' then
+            local expression2=gc_allocator:new(ASTNode{
+                type='ExpressionStatement',
+                u={
+                    ExpressionStatement={
+                        expression=expression,
+                    },
+                },
+            })
+            if parent._context~=nilptr then
+                local ctx:*vector(*ASTNode)=&$parent._context
+                ctx:push(expression2)
+            end
+        else
+            if parent._context~=nilptr then
+                local ctx:*vector(*ASTNode)=&$parent._context
+                ctx:push(expression)
+            end
         end
     end
     if node.type == 'Program' then
@@ -272,7 +305,7 @@ end
 local function codeGenerator(node: ASTNode):string
     local sb:stringbuilder
     if node.type=='Program' then
-        sb:write_string("\nint main() {\n")
+        sb:write_string("int main() {\n")
         for i=0,<#node.u.Program.body do
             sb:write_string(codeGenerator(node.u.Program.body[i]))
         end
@@ -280,33 +313,19 @@ local function codeGenerator(node: ASTNode):string
     elseif node.type=='NumberLiteral' then
         sb:write_string(node.u.NumberLiteral.value)
     elseif node.type=='ExpressionStatement' then
-    --[[
-    type:string,
-    callee:record{
-        type:string,
-        name:string,
-    },
-    arguments:vector(*ASTNode),]]
-        if node.u.ExpressionStatement.expression.type=="CallExpression" then
-            sb:write_string("\t")
-            if node.u.ExpressionStatement.expression.callee.type=='Identifier' then
-                sb:write_string(node.u.ExpressionStatement.expression.callee.name)
-            else
-                error(string.format("Code gen ExprStatement CallExpr Type error: `%s`", node.u.ExpressionStatement.expression.callee.type))
-            end
-            sb:write_string("(")
-                for i=0,<#node.u.ExpressionStatement.expression.arguments do
-                    if i>0 then
-                        sb:write_string(", ")
-                    end
-                    sb:write_string(codeGenerator(node.u.ExpressionStatement.expression.arguments[i]))
-                end
-            sb:write_string(")")
-        else
-            error(string.format("Code gen ExprStatement Type error: `%s`", node.u.ExpressionStatement.expression.type))
-        end
-        --sb:write_string(codeGenerator(node.u.ExpressionStatement.expression))
+        sb:write_string("\t")
+        sb:write_string(codeGenerator(node.u.ExpressionStatement.expression))
         sb:write_string(";\n")
+    elseif node.type=='Call' then
+        sb:write_string(node.u.Call.callee.name)
+        sb:write_string("(")
+        for i=0,<#node.u.Call.arguments do
+            if i>0 then
+                sb:write_string(", ")
+            end
+            sb:write_string(codeGenerator(node.u.Call.arguments[i]))
+        end
+        sb:write_string(")")
     else
         error(string.format("Code gen Type error: `%s`", node.type))
     end
@@ -320,11 +339,14 @@ local function print_tokens(tokens:vector(Token))
     --print("Found ",#tokens," tokens")
     for t=0,<#tokens do
         print(tokens[t].type,tokens[t].value)
+        --io.stdout:writef("%s",tokens[t].type)
+        --io.stdout:writef("%s",tokens[t].value)
     end
 end
 
 local function compiler(input: string):string
-    print('input=',input)
+    --print('input=\\\n',input)
+    io.stdout:writef("input=\\\n%s",input)
     local tokens=tokenizer(input)
     --print_tokens(tokens)
     local ast=parser(tokens)
@@ -335,10 +357,9 @@ local function compiler(input: string):string
     return output
 end
 
-local source=[[
-    (add 2 2)
-    (subtract 4 2)
-    (add 2 (subtract 4 2))
-    ]]
+local source=[[(add 2 2)
+(subtract 4 2)
+(add 2 (subtract 4 2))
+]]
 local output=compiler(source)
-print("output=",output)
+io.stdout:writef("output=\\\n%s",output)
