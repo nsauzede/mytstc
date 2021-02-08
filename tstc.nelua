@@ -3,20 +3,12 @@ require 'string'
 require 'stringbuilder'
 require 'C.stdio'
 require 'io'
-local ASTNode: type <forwarddecl> = @record{}
+
 local Token:type=@record{
     type:string,
     value:string,
 }
-local Expression:type=@record{
-    type:string,
-    callee:record{
-        type:string,
-        name:string,
-    },
-    arguments:vector(*ASTNode),
-}
-ASTNode=@record{
+local ASTNode=@record{
     type:string,
     u:union{
         Program:record{
@@ -67,18 +59,6 @@ local function print_AST_R(node: ASTNode, nest: integer)
             print_AST_R(node.u.CallExpression.params[i], nest + 1)
         end
     end
---[[
-            ExpressionStatement:record{
-            expression:*ASTNode,
-        },
-        Call:record{
-            callee:record{
-                type:string,
-                name:string,
-            },
-            arguments:vector(*ASTNode),
-        }
-]]
     if node.type=='ExpressionStatement' then
         print_AST_R(node.u.ExpressionStatement.expression, nest + 1)
     end
@@ -92,21 +72,11 @@ local function print_AST_R(node: ASTNode, nest: integer)
     end
 end
 
-local function print_AST(ast: ASTNode)
-    print_AST_R(ast, 0)
-end
+local function print_AST(ast: ASTNode) print_AST_R(ast, 0) end
 
-local function is_space(c:byte)
-    return c==' '_byte or c<='\n'_byte
-end
-
-local function is_number(c:byte)
-    return c>='0'_byte and c<='9'_byte
-end
-
-local function is_letter(c:byte)
-    return c>='a'_byte and c<='z'_byte
-end
+local function is_space(c:byte) return c==' '_byte or c<='\n'_byte end
+local function is_number(c:byte) return c>='0'_byte and c<='9'_byte end
+local function is_letter(c:byte) return c>='a'_byte and c<='z'_byte end
 
 local function tokenizer(input: string): vector(Token)
     local current=0
@@ -276,11 +246,9 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
     end
     if node.type == 'Program' then
         --traverseArray(node.body, node)
-        --print('traversing array body for program')
         for i=0,<#node.u.Program.body do traverseNode(node.u.Program.body[i], node) end
     elseif node.type == 'CallExpression' then
         --traverseArray(node.params, node)
-        --print('traversing array params for callexpr')
         for i=0,<#node.u.CallExpression.params do traverseNode(node.u.CallExpression.params[i], node) end
     elseif node.type == 'NumberLiteral' or node.type == 'StringLiteral' then
         -- nothing special
@@ -345,8 +313,8 @@ local function print_tokens(tokens:vector(Token))
 end
 
 local function compiler(input: string):string
-    --print('input=\\\n',input)
-    io.stdout:writef("input=\\\n%s",input)
+    print('input=\\\n',input)
+    --io.stdout:writef("input=\\\n%s",input)
     local tokens=tokenizer(input)
     --print_tokens(tokens)
     local ast=parser(tokens)
@@ -357,9 +325,10 @@ local function compiler(input: string):string
     return output
 end
 
-local source=[[(add 2 2)
-(subtract 4 2)
-(add 2 (subtract 4 2))
+local source=[[
+    (add 2 2)
+    (subtract 4 2)
+    (add 2 (subtract 4 2))
 ]]
 local output=compiler(source)
 io.stdout:writef("output=\\\n%s",output)
