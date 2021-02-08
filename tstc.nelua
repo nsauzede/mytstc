@@ -8,10 +8,6 @@ local Token:type=@record{
     type:string,
     value:string,
 }
-local Callee:type=@record{
-    type:string,
-    name:string,
-}
 local Expression:type=@record{
     type:string,
     callee:record{
@@ -45,10 +41,8 @@ ASTNode=@record{
 
 local function print_AST_R(node: ASTNode, nest: integer)
     for i=0,<nest do
-        --C.printf("\t")
         io.stdout:write("\t")
     end
-    --C.printf("%s", node.type)
     io.stdout:writef("%s", node.type)
     if node.type=='Program' then
         print(' body=\\')
@@ -57,17 +51,22 @@ local function print_AST_R(node: ASTNode, nest: integer)
         end
     end
     if node.type=='NumberLiteral' or node.type=='StringLiteral' then
-        --C.printf(" value=%s\n", node.u.NumberLiteral.value)
         io.stdout:writef(" value=%s\n", node.u.NumberLiteral.value)
     end
     if node.type=='CallExpression' then
-        --C.printf(" name=%s", node.u.CallExpression.name)
         io.stdout:writef(" name=%s", node.u.CallExpression.name)
-        --C.printf(" params=\\\n")
         io.stdout:write(" params=\\\n")
         for i=0,<#node.u.CallExpression.params do
-            --print("about to print_AST_R param ", i)
             print_AST_R(node.u.CallExpression.params[i], nest + 1)
+        end
+    end
+    if node.type=='ExpressionStatement' then
+        io.stdout:writef(" expression type=%s",node.u.ExpressionStatement.expression.type)
+        io.stdout:writef(" callee type=%s",node.u.ExpressionStatement.expression.callee.type)
+        io.stdout:writef(" name=%s",node.u.ExpressionStatement.expression.callee.name)
+        io.stdout:write(" arguments=\\\n")
+        for i=0,<#node.u.ExpressionStatement.expression.arguments do
+            print_AST_R(node.u.ExpressionStatement.expression.arguments[i], nest + 1)
         end
     end
 end
@@ -75,34 +74,6 @@ end
 local function print_AST(ast: ASTNode)
     print_AST_R(ast, 0)
 end
-
---[[local function print_newAST_R(node: ASTNode, nest: integer)
-    for i=0,<nest do
-        --C.printf("\t")
-        io.stdout:write("\t")
-    end
-    C.printf("%s", node.type)
-    if node.type=='Program' then
-        print(' body=\\')
-        for i=0,<#node.u.Program.body do
-            print_newAST_R(node.u.Program.body[i], nest + 1)
-        end
-    end
-    if node.type=='NumberLiteral' or node.type=='StringLiteral' then
-        C.printf(" value=%s\n", node.u.NumberLiteral.value)
-    end
-    if node.type=='CallExpression' then
-        C.printf(" callee type=%s name=%s", node.u.CallExpression.callee.type, node.callee.name)
-        io.stdout:write(" arguments=\\\n")
-        for i=0,<#node.arguments do
-            print_newAST_R(node.arguments[i], nest + 1)
-        end
-    end
-end
-
-local function print_newAST(ast: ASTNode)
-    print_newAST_R(ast, 0)
-end]]
 
 local function is_space(c:byte)
     return c==' '_byte or c<='\n'_byte
@@ -157,7 +128,6 @@ local function tokenizer(input: string): vector(Token)
             tokens:push(Token{'name',value})
             continue
         end
-        print("about to error at 152")
         error(string.format("I don't know what this character is: `%c`", c))
     end
     return tokens
@@ -210,7 +180,6 @@ local function parser(tokens: vector(Token)): ASTNode
             current=current+1
             return current,node
         end
-        print("about to error at 204")
         error(string.format("Type error: `%s`", token.type))
     end
     local current=0
@@ -221,25 +190,13 @@ local function parser(tokens: vector(Token)): ASTNode
         local node:ASTNode
         current,node=walk(current,tokens)
         ast.u.Program.body:push(gc_allocator:new(node))
-        --break
     end
     return ast
 end
 
---[[
 local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
-local function traverseArray(array: vector(ASTNode), parent: pointer(ASTNode))
-    for i=0,<#array do
-        traverseNode(array[i], parent)
-    end
-end
-]]
-
-local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
-    --print('traverseNode: type=',node.type)
     if node.type=='NumberLiteral' then
         if parent._context~=nilptr then
-            --print('Pushing NumberLiteral !! parent=',parent, 'context=', parent._context)
             local ctx:*vector(*ASTNode)=&$parent._context
             ctx:push(gc_allocator:new(ASTNode{
                 type='NumberLiteral',
@@ -249,11 +206,9 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
                     },
                 },
             }))
-            --print('Done')
         end
     end
     if node.type=='StringLiteral' then
-        --print('Pushing StringLiteral !! parent=',parent, 'context=', parent._context)
         local ctx:*vector(*ASTNode)=&$parent._context
         ctx:push(gc_allocator:new(ASTNode{
             type='StringLiteral',
@@ -281,16 +236,9 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
             },
         })
         node._context = &expression.u.ExpressionStatement.expression.arguments
-        --[[if parent.type ~= 'CallExpression' then
-            expression=@record{
-
-            }
-        end]]
         if parent._context~=nilptr then
-            --print('Pushing CallExpression !! parent=',parent, 'context=', parent._context)
             local ctx:*vector(*ASTNode)=&$parent._context
             ctx:push(expression)
-            --print('Done')
         end
     end
     if node.type == 'Program' then
@@ -303,9 +251,7 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
         for i=0,<#node.u.CallExpression.params do traverseNode(node.u.CallExpression.params[i], node) end
     elseif node.type == 'NumberLiteral' or node.type == 'StringLiteral' then
         -- nothing special
-        --print('doing nothing special for callexpr')
     else
-        print("about to error at 297 type=", node.type)
         error(string.format("Type error: `%s`", node.type))
     end
 end
@@ -323,12 +269,55 @@ local function transformer(ast: ASTNode):ASTNode
     return newAst
 end
 
-local function codeGenerator(ast: ASTNode):string
-    return "output code"
+local function codeGenerator(node: ASTNode):string
+    local sb:stringbuilder
+    if node.type=='Program' then
+        sb:write_string("\nint main() {\n")
+        for i=0,<#node.u.Program.body do
+            sb:write_string(codeGenerator(node.u.Program.body[i]))
+        end
+        sb:write_string("}\n")
+    elseif node.type=='NumberLiteral' then
+        sb:write_string(node.u.NumberLiteral.value)
+    elseif node.type=='ExpressionStatement' then
+    --[[
+    type:string,
+    callee:record{
+        type:string,
+        name:string,
+    },
+    arguments:vector(*ASTNode),]]
+        if node.u.ExpressionStatement.expression.type=="CallExpression" then
+            sb:write_string("\t")
+            if node.u.ExpressionStatement.expression.callee.type=='Identifier' then
+                sb:write_string(node.u.ExpressionStatement.expression.callee.name)
+            else
+                error(string.format("Code gen ExprStatement CallExpr Type error: `%s`", node.u.ExpressionStatement.expression.callee.type))
+            end
+            sb:write_string("(")
+                for i=0,<#node.u.ExpressionStatement.expression.arguments do
+                    if i>0 then
+                        sb:write_string(", ")
+                    end
+                    sb:write_string(codeGenerator(node.u.ExpressionStatement.expression.arguments[i]))
+                end
+            sb:write_string(")")
+        else
+            error(string.format("Code gen ExprStatement Type error: `%s`", node.u.ExpressionStatement.expression.type))
+        end
+        --sb:write_string(codeGenerator(node.u.ExpressionStatement.expression))
+        sb:write_string(";\n")
+    else
+        error(string.format("Code gen Type error: `%s`", node.type))
+    end
+    --sb:write_byte(65)
+    local output:stringview=sb
+    return output
+    --return stringview(sb)
 end
 
 local function print_tokens(tokens:vector(Token))
-    print("Found ",#tokens," tokens")
+    --print("Found ",#tokens," tokens")
     for t=0,<#tokens do
         print(tokens[t].type,tokens[t].value)
     end
@@ -337,12 +326,12 @@ end
 local function compiler(input: string):string
     print('input=',input)
     local tokens=tokenizer(input)
-    print_tokens(tokens)
+    --print_tokens(tokens)
     local ast=parser(tokens)
-    print_AST(ast)
+    --print_AST(ast)
     local newAst=transformer(ast)
+    --print_AST(newAst)
     local output=codeGenerator(newAst)
-    --print_newAST(newAst)
     return output
 end
 
@@ -352,4 +341,4 @@ local source=[[
     (add 2 (subtract 4 2))
     ]]
 local output=compiler(source)
-print(output)
+print("output=",output)
