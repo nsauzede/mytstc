@@ -9,7 +9,7 @@ struct Token {
 struct ASTNodeGeneric {
 	@type string
 mut:
-	ctxt voidptr
+	ctxt []ASTNode
 }
 struct Program {
 	@type string = 'Program'
@@ -154,9 +154,11 @@ fn parser(tokens []Token) ASTNode {unsafe{
 	}
 	return ast
 }}
-fn traverse_node(node ASTNode, parent voidptr) {
-
-}
+fn traverse_node(node ASTNode, parent &ASTNode) {unsafe{
+	if node.u.@type=='NumberLiteral' {
+		parent.u.ctxt<<ASTNode{numberliteral:{value:node.numberliteral.value}}
+	}
+}}
 fn traverser(ast ASTNode) {
 	traverse_node(ast, voidptr(0))
 }
