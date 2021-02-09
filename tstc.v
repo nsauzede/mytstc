@@ -5,14 +5,62 @@ struct Token {
 	@type string
 	value string
 }
-struct ASTNode {
+
+struct ASTNodeGeneric {
 	@type string
+}
+struct Program {
+	@type string = 'Program'
+mut:
+	body []ASTNode
+}
+struct NumberLiteral {
+	@type string = 'NumberLiteral'
 	value string
 }
-fn print_ast(ast []ASTNode) {
-	for e in ast {
-		println('e=$e')
+struct StringLiteral {
+	@type string = 'StringLiteral'
+	value string
+}
+struct CallExpression {
+	@type string = 'CallExpression'
+	name string
+mut:
+	params []ASTNode
+}
+
+union ASTNode {
+	u ASTNodeGeneric
+mut:
+	program Program
+	numberliteral NumberLiteral
+	stringliteral StringLiteral
+	callexpression CallExpression
+}
+
+fn print_ast_r(node ASTNode, nest int) {unsafe {
+	for i:=0;i<nest;i++ {
+		print('\t')
 	}
+	print('${node.u.@type}')
+	if node.u.@type=='Program' {
+		println(' body=\\')
+		for e in node.program.body {
+			print_ast_r(e, nest + 1)
+		}
+	}
+	if node.u.@type=='NumberLiteral'||node.u.@type=='StringLiteral'{
+		println(' value=$node.numberliteral.value')
+	}
+	if node.u.@type=='CallExpression' {
+		println(' name=$node.callexpression.name params=\\')
+		for e in node.callexpression.params {
+			print_ast_r(e, nest + 1)
+		}
+	}
+}}
+fn print_ast(ast ASTNode) {
+	print_ast_r(ast, 0)
 }
 fn is_space(c byte) bool {
 	return c==` ` || c==`\n`
@@ -66,14 +114,48 @@ fn tokenizer(input string) []Token {
 	}
 	return tokens
 }
-fn parser(tokens []Token) []ASTNode {
-	mut ast:=[]ASTNode{}
+fn walk(current int, tokens []Token) (int,ASTNode) {unsafe{
+	mut token:=tokens[current]
+	if token.@type=='number' {
+		return current+1,ASTNode{
+			numberliteral:{value:token.value}
+		}
+	}
+	if token.@type=='string' {
+		return current+1,ASTNode{
+			stringliteral:{value:token.value}
+		}
+	}
+	if token.@type=='paren' && token.value=='(' {
+		current++
+		token=tokens[current]
+		mut node := ASTNode{callexpression:{name:token.value}}
+		current++
+		token=tokens[current]
+		for token.@type!='paren' || (token.@type=='paren' && token.value!=')') {
+			mut child:=ASTNode{}
+			current,child=walk(current,tokens)
+			node.callexpression.params<<child
+			token=tokens[current]
+		}
+		return current+1,node
+	}
+	panic('walk: Type error: `${token.@type}` ${token.value}')
+}}
+fn parser(tokens []Token) ASTNode {unsafe{
+	mut ast:=ASTNode{program:{}}
+	mut current:=0
+	for current<tokens.len {
+		mut node:=ASTNode{}
+		current,node=walk(current,tokens)
+		ast.program.body<<node
+	}
+	return ast
+}}
+fn transformer(ast ASTNode) ASTNode {
 	return ast
 }
-fn transformer(ast []ASTNode) []ASTNode {
-	return ast
-}
-fn code_generator(ast []ASTNode) string {
+fn code_generator(ast ASTNode) string {
 	return ''
 }
 fn print_tokens(tokens []Token) {
@@ -114,7 +196,7 @@ fn usage() {
 	println('https://github.com/nsauzede/mytstc')
 }
 fn main() {
-	mut flags:=print_input|print_tokens|print_output
+	mut flags:=print_input|print_tokens|print_ast//|print_output
 	source:="    (add 2 2)
     (subtract 4 2)
     (add 2 (subtract 4 2))"

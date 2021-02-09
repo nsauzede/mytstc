@@ -4,6 +4,7 @@ require 'stringbuilder'
 require 'C.stdio'
 require 'io'
 require 'arg'
+require 'os'
 local Token:type=@record{
     type:string,
     value:string,
@@ -134,8 +135,7 @@ local function parser(tokens: vector(Token)): ASTNode
     local function walk(current: integer, tokens:vector(Token))
         local token = tokens[current]
         if token.type == 'number' then
-            current=current+1
-            return current,ASTNode{
+            return current+1,ASTNode{
                 type='NumberLiteral',
                 u={
                     NumberLiteral={
@@ -145,8 +145,7 @@ local function parser(tokens: vector(Token)): ASTNode
             }
         end
         if token.type == 'string' then
-            current=current+1
-            return current,ASTNode{
+            return current+1,ASTNode{
                 type='StringLiteral',
                 u={
                     StringLiteral={
@@ -174,8 +173,7 @@ local function parser(tokens: vector(Token)): ASTNode
                 node.u.CallExpression.params:push(gc_allocator:new(child))
                 token=tokens[current]
             end
-            current=current+1
-            return current,node
+            return current+1,node
         end
         error(string.format("Type error: `%s`", token.type))
     end
@@ -308,12 +306,11 @@ local function codeGenerator(node: ASTNode):string
 end
 
 local Flags = @enum {
-    none = 0,
-    print_input,
-    print_tokens,
-    print_ast,
-    print_newast,
-    print_output,
+    print_input     = 0x01,
+    print_tokens    = 0x02,
+    print_ast       = 0x04,
+    print_newast    = 0x08,
+    print_output    = 0x10,
 }
 local function compiler(input: string, flags: integer):string
     local tokens=tokenizer(input)
@@ -326,23 +323,36 @@ local function compiler(input: string, flags: integer):string
     return output
 end
 
+local function usage()
+    local prog=arg[0]
+    io.stdout:writef('Usage: %s [options]', prog)
+	print('')
+	print('Options:')
+	print('   --help\t\tDisplay this information.')
+	print('   --print-input\tDisplay the source input.')
+	print('   --print-tokens\tDisplay the tokens.')
+	print('   --print-ast\t\tDisplay the ast.')
+	print('   --print-newast\tDisplay the newast.')
+	print('   --print-output\tDisplay the generated output.')
+	print('')
+	print('For more information, please see:')
+	print('https://github.com/nsauzede/mytstc')
+end
+
 local source=[[
     (add 2 2)
     (subtract 4 2)
     (add 2 (subtract 4 2))
 ]]
-local flags=0--|Flags.print_tokens
+local flags=0|Flags.print_input|Flags.print_tokens|Flags.print_ast--|Flags.print_output
 for i=1,#arg do
+    if arg[i]=='--help' then usage() os.exit(true) end
     if arg[i]=='--print-input' then flags=flags|Flags.print_input end
     if arg[i]=='--print-tokens' then flags=flags|Flags.print_tokens end
+    if arg[i]=='--print-ast' then flags=flags|Flags.print_ast end
+    if arg[i]=='--print-newast' then flags=flags|Flags.print_newast end
+    if arg[i]=='--print-output' then flags=flags|Flags.print_output end
 end
---[[print('flags=',flags)
-print(Flags.none)
-print(Flags.print_input)
-print(Flags.print_tokens)
-print(Flags.print_ast)
-print(Flags.print_newast)
-print(Flags.print_output)]]
 if 0~=flags&Flags.print_input then io.stdout:writef("input=\\\n%s",source)end
 local output=compiler(source, flags)
 if 0~=flags&Flags.print_output then io.stdout:writef("output=\\\n%s",output)end
