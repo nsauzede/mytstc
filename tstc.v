@@ -8,6 +8,8 @@ struct Token {
 
 struct ASTNodeGeneric {
 	@type string
+mut:
+	ctxt voidptr
 }
 struct Program {
 	@type string = 'Program'
@@ -30,8 +32,8 @@ mut:
 }
 
 union ASTNode {
-	u ASTNodeGeneric
 mut:
+	u ASTNodeGeneric
 	program Program
 	numberliteral NumberLiteral
 	stringliteral StringLiteral
@@ -152,9 +154,18 @@ fn parser(tokens []Token) ASTNode {unsafe{
 	}
 	return ast
 }}
-fn transformer(ast ASTNode) ASTNode {
-	return ast
+fn traverse_node(node ASTNode, parent voidptr) {
+
 }
+fn traverser(ast ASTNode) {
+	traverse_node(ast, voidptr(0))
+}
+fn transformer(mut ast ASTNode) ASTNode {unsafe{
+	mut newast:=ASTNode{program:{}}
+	ast.u.ctxt=&newast.program.body
+	traverser(ast)
+	return newast
+}}
 fn code_generator(ast ASTNode) string {
 	return ''
 }
@@ -173,9 +184,9 @@ const (
 fn compiler(input string, flags int) string {
 	tokens:=tokenizer(input)
 	if 0!=flags&print_tokens {print_tokens(tokens)}
-	ast:=parser(tokens)
+	mut ast:=parser(tokens)
 	if 0!=flags&print_ast {print_ast(ast)}
-	newast:=transformer(ast)
+	newast:=transformer(mut ast)
 	if 0!=flags&print_newast {print_ast(newast)}
 	output:=code_generator(newast)
 	return output
@@ -196,7 +207,7 @@ fn usage() {
 	println('https://github.com/nsauzede/mytstc')
 }
 fn main() {
-	mut flags:=print_input|print_tokens|print_ast//|print_output
+	mut flags:=print_input|print_tokens|print_ast|print_newast//|print_output
 	source:="    (add 2 2)
     (subtract 4 2)
     (add 2 (subtract 4 2))"
