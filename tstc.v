@@ -6,29 +6,57 @@ struct Token {
 	value string
 }
 
-struct ASTNodeGeneric {
+struct Callee {
 	@type string
+	name string
+}
+
+struct ASTNodeGeneric {
 mut:
-	ctxt []ASTNode
+	@type string
+	ctxt &[]ASTNode = voidptr(0)
 }
 struct Program {
-	@type string = 'Program'
 mut:
+	@type string = 'Program'
+	ctxt &[]ASTNode = voidptr(0)
+
 	body []ASTNode
 }
 struct NumberLiteral {
 	@type string = 'NumberLiteral'
+	ctxt &[]ASTNode = voidptr(0)
+
 	value string
 }
 struct StringLiteral {
 	@type string = 'StringLiteral'
+	ctxt &[]ASTNode = voidptr(0)
+
 	value string
 }
 struct CallExpression {
-	@type string = 'CallExpression'
-	name string
 mut:
+	@type string = 'CallExpression'
+	ctxt &[]ASTNode = voidptr(0)
+
+	name string
 	params []ASTNode
+}
+struct ExpressionStatement {
+mut:
+	@type string = 'ExpressionStatement'
+	ctxt &[]ASTNode = voidptr(0)
+
+	expression &ASTNode = voidptr(0)
+}
+struct Call {
+mut:
+	@type string = 'Call'
+	ctxt &[]ASTNode = voidptr(0)
+
+	callee Callee
+	arguments []ASTNode
 }
 
 union ASTNode {
@@ -38,6 +66,8 @@ mut:
 	numberliteral NumberLiteral
 	stringliteral StringLiteral
 	callexpression CallExpression
+	expressionstatement ExpressionStatement
+	call Call
 }
 
 fn print_ast_r(node ASTNode, nest int) {unsafe {
@@ -57,6 +87,17 @@ fn print_ast_r(node ASTNode, nest int) {unsafe {
 	if node.u.@type=='CallExpression' {
 		println(' name=$node.callexpression.name params=\\')
 		for e in node.callexpression.params {
+			print_ast_r(e, nest + 1)
+		}
+	}
+	if node.u.@type=='ExpressionStatement' {
+		print_ast_r(node.expressionstatement.expression, nest + 1)
+	}
+	if node.u.@type=='Call' {
+		print(' callee type=${node.call.callee.@type}')
+		print(' name=${node.call.callee.name}')
+		print(' arguments:${node.call.arguments.len}=\\\n')
+		for e in node.call.arguments {
 			print_ast_r(e, nest + 1)
 		}
 	}
@@ -154,18 +195,51 @@ fn parser(tokens []Token) ASTNode {unsafe{
 	}
 	return ast
 }}
-fn traverse_node(node ASTNode, parent &ASTNode) {unsafe{
+fn traverse_node(mut node ASTNode, parent &ASTNode) {unsafe{
+	println('hello traverse_node ${node.u.@type}')
 	if node.u.@type=='NumberLiteral' {
-		parent.u.ctxt<<ASTNode{numberliteral:{value:node.numberliteral.value}}
+		if parent!=voidptr(0) {
+			//println('parent not null')
+			if parent.u.ctxt!=voidptr(0) {
+				println('pushing number literal..')
+				//println('ctx=${parent.u.ctxt}')
+				parent.u.ctxt<<ASTNode{numberliteral:{value:node.numberliteral.value}}
+			}
+		}
+	}
+	if node.u.@type=='CallExpression' {
+		mut expression:=&ASTNode{call:{callee:{@type:'Identifier',name:node.callexpression.name}}}
+		node.u.ctxt=&expression.call.arguments
+		if parent.u.@type!='CallExpression' {
+			expression2:=ASTNode{expressionstatement:{expression:expression}}
+			parent.u.ctxt<<expression2
+		} else {
+			parent.u.ctxt<<expression
+		}
+	}
+	if node.u.@type=='Program' {
+		//println('traversing body.. ${node.program.body.len}')
+		for e in node.program.body {
+			traverse_node(mut e, node)
+		}
+	} else if node.u.@type=='CallExpression' {
+		for e in node.callexpression.params {
+			traverse_node(mut e, node)
+		}
+	} else if node.u.@type=='NumberLiteral'||node.u.@type=='StringLiteral' {
+		// nothing special
+	} else {
+		panic('Type error: `${node.u.@type}`')
 	}
 }}
-fn traverser(ast ASTNode) {
-	traverse_node(ast, voidptr(0))
+fn traverser(mut ast ASTNode) {
+	traverse_node(mut ast, voidptr(0))
 }
 fn transformer(mut ast ASTNode) ASTNode {unsafe{
 	mut newast:=ASTNode{program:{}}
 	ast.u.ctxt=&newast.program.body
-	traverser(ast)
+	traverser(mut ast)
+	//println('newast body=${newast.program.body.len}')
 	return newast
 }}
 fn code_generator(ast ASTNode) string {
