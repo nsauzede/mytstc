@@ -344,7 +344,7 @@ local source=[[
     (subtract 4 2)
     (add 2 (subtract 4 2))
 ]]
-local flags=0|Flags.print_input|Flags.print_tokens|Flags.print_ast|Flags.print_newast--|Flags.print_output
+local flags=0|Flags.print_input|0*Flags.print_tokens|0*Flags.print_ast|Flags.print_newast--|Flags.print_output
 for i=1,#arg do
     if arg[i]=='--help' then usage() os.exit(true) end
     if arg[i]=='--print-input' then flags=flags|Flags.print_input end

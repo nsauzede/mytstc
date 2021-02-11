@@ -14,49 +14,49 @@ struct Callee {
 struct ASTNodeGeneric {
 mut:
 	@type string
-	ctxt &[]ASTNode = voidptr(0)
+	ctxt &[]&ASTNode = voidptr(0)
 }
 struct Program {
 mut:
 	@type string = 'Program'
-	ctxt &[]ASTNode = voidptr(0)
+	ctxt &[]&ASTNode = voidptr(0)
 
-	body []ASTNode
+	body []&ASTNode
 }
 struct NumberLiteral {
 	@type string = 'NumberLiteral'
-	ctxt &[]ASTNode = voidptr(0)
+	ctxt &[]&ASTNode = voidptr(0)
 
 	value string
 }
 struct StringLiteral {
 	@type string = 'StringLiteral'
-	ctxt &[]ASTNode = voidptr(0)
+	ctxt &[]&ASTNode = voidptr(0)
 
 	value string
 }
 struct CallExpression {
 mut:
 	@type string = 'CallExpression'
-	ctxt &[]ASTNode = voidptr(0)
+	ctxt &[]&ASTNode = voidptr(0)
 
 	name string
-	params []ASTNode
+	params []&ASTNode
 }
 struct ExpressionStatement {
 mut:
 	@type string = 'ExpressionStatement'
-	ctxt &[]ASTNode = voidptr(0)
+	ctxt &[]&ASTNode = voidptr(0)
 
 	expression &ASTNode = voidptr(0)
 }
 struct Call {
 mut:
 	@type string = 'Call'
-	ctxt &[]ASTNode = voidptr(0)
+	ctxt &[]&ASTNode = voidptr(0)
 
 	callee Callee
-	arguments []ASTNode
+	arguments []&ASTNode
 }
 
 union ASTNode {
@@ -94,9 +94,12 @@ fn print_ast_r(node ASTNode, nest int) {unsafe {
 		print_ast_r(node.expressionstatement.expression, nest + 1)
 	}
 	if node.u.@type=='Call' {
+		//print(' node=${voidptr(&node)} type=${node.call.callee.@type}')
 		print(' callee type=${node.call.callee.@type}')
 		print(' name=${node.call.callee.name}')
-		print(' arguments:${node.call.arguments.len}=\\\n')
+		//print(' args=${voidptr(&node.call.arguments)}:${node.call.arguments.len}=\\\n')
+		//print(' arguments:${node.call.arguments.len}=\\\n')
+		print(' arguments=\\\n')
 		for e in node.call.arguments {
 			print_ast_r(e, nest + 1)
 		}
@@ -157,26 +160,26 @@ fn tokenizer(input string) []Token {
 	}
 	return tokens
 }
-fn walk(current int, tokens []Token) (int,ASTNode) {unsafe{
+fn walk(current int, tokens []Token) (int,&ASTNode) {unsafe{
 	mut token:=tokens[current]
 	if token.@type=='number' {
-		return current+1,ASTNode{
+		return current+1,&ASTNode{
 			numberliteral:{value:token.value}
 		}
 	}
 	if token.@type=='string' {
-		return current+1,ASTNode{
+		return current+1,&ASTNode{
 			stringliteral:{value:token.value}
 		}
 	}
 	if token.@type=='paren' && token.value=='(' {
 		current++
 		token=tokens[current]
-		mut node := ASTNode{callexpression:{name:token.value}}
+		mut node := &ASTNode{callexpression:{name:token.value}}
 		current++
 		token=tokens[current]
 		for token.@type!='paren' || (token.@type=='paren' && token.value!=')') {
-			mut child:=ASTNode{}
+			mut child:=&ASTNode{}
 			current,child=walk(current,tokens)
 			node.callexpression.params<<child
 			token=tokens[current]
@@ -189,29 +192,30 @@ fn parser(tokens []Token) ASTNode {unsafe{
 	mut ast:=ASTNode{program:{}}
 	mut current:=0
 	for current<tokens.len {
-		mut node:=ASTNode{}
+		mut node:=&ASTNode{}
 		current,node=walk(current,tokens)
 		ast.program.body<<node
 	}
 	return ast
 }}
 fn traverse_node(mut node ASTNode, parent &ASTNode) {unsafe{
-	println('hello traverse_node ${node.u.@type}')
+	//println('hello traverse_node=${voidptr(node)} ${node.u.@type}')
 	if node.u.@type=='NumberLiteral' {
 		if parent!=voidptr(0) {
-			//println('parent not null')
+			//print(' parent=${voidptr(parent)}')
 			if parent.u.ctxt!=voidptr(0) {
-				println('pushing number literal..')
-				//println('ctx=${parent.u.ctxt}')
-				parent.u.ctxt<<ASTNode{numberliteral:{value:node.numberliteral.value}}
+				//print(' ctx=${voidptr(parent.u.ctxt)}')
+				//print(' pushing nlit=${node.numberliteral.value}')
+				parent.u.ctxt<<&ASTNode{numberliteral:{value:node.numberliteral.value}}
 			}
+			//println('')
 		}
 	}
 	if node.u.@type=='CallExpression' {
 		mut expression:=&ASTNode{call:{callee:{@type:'Identifier',name:node.callexpression.name}}}
 		node.u.ctxt=&expression.call.arguments
 		if parent.u.@type!='CallExpression' {
-			expression2:=ASTNode{expressionstatement:{expression:expression}}
+			expression2:=&ASTNode{expressionstatement:{expression:expression}}
 			parent.u.ctxt<<expression2
 		} else {
 			parent.u.ctxt<<expression
@@ -283,7 +287,7 @@ fn usage() {
 	println('https://github.com/nsauzede/mytstc')
 }
 fn main() {
-	mut flags:=print_input|print_tokens|print_ast|print_newast//|print_output
+	mut flags:=print_input|0*print_tokens|0*print_ast|print_newast//|print_output
 	source:="    (add 2 2)
     (subtract 4 2)
     (add 2 (subtract 4 2))"
