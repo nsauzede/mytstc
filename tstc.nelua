@@ -344,7 +344,7 @@ local source=[[
     (subtract 4 2)
     (add 2 (subtract 4 2))
 ]]
-local flags=0|Flags.print_input|0*Flags.print_tokens|0*Flags.print_ast|Flags.print_newast--|Flags.print_output
+local flags=0|Flags.print_input|0*Flags.print_tokens|0*Flags.print_ast|0*Flags.print_newast|Flags.print_output
 for i=1,#arg do
     if arg[i]=='--help' then usage() os.exit(true) end
     if arg[i]=='--print-input' then flags=flags|Flags.print_input end
@@ -353,6 +353,6 @@ for i=1,#arg do
     if arg[i]=='--print-newast' then flags=flags|Flags.print_newast end
     if arg[i]=='--print-output' then flags=flags|Flags.print_output end
 end
-if 0~=flags&Flags.print_input then io.stdout:writef("input=\\\n%s",source)end
+if 0~=flags&Flags.print_input then io.stdout:writef("input=\\\n%s\n",source)end
 local output=compiler(source, flags)
-if 0~=flags&Flags.print_output then io.stdout:writef("output=\\\n%s",output)end
+if 0~=flags&Flags.print_output then io.stdout:writef("output=\\\n%s\n",output)end

@@ -246,9 +246,37 @@ fn transformer(mut ast ASTNode) ASTNode {unsafe{
 	//println('newast body=${newast.program.body.len}')
 	return newast
 }}
-fn code_generator(ast ASTNode) string {
-	return ''
-}
+fn code_generator(node ASTNode) string {unsafe{
+	mut sb:=strings.new_builder(1024)
+	if node.u.@type=='Program' {
+		sb.write('int main() {\n')
+		for e in node.program.body {
+			sb.write(code_generator(e))
+		}
+		sb.write('}\n')
+	} else if node.u.@type=='NumberLiteral' {
+		sb.write(node.numberliteral.value)
+	} else if node.u.@type=='ExpressionStatement' {
+		sb.write('\t')
+		sb.write(code_generator(node.expressionstatement.expression))
+		sb.write(';\n')
+	} else if node.u.@type=='Call' {
+		sb.write(node.call.callee.name)
+		sb.write('(')
+		for i,e in node.call.arguments {
+			if i>0 {
+				sb.write(', ')
+			}
+			sb.write(code_generator(e))
+		}
+		sb.write(')')
+	} else {
+		panic('Code gen Type error: `${node.u.@type}`')
+	}
+	output:=sb.str()
+	sb.free()
+	return output
+}}
 fn print_tokens(tokens []Token) {
 	for i:=0;i<tokens.len;i++ {
 		println('${tokens[i].@type}\t${tokens[i].value}')
@@ -287,10 +315,11 @@ fn usage() {
 	println('https://github.com/nsauzede/mytstc')
 }
 fn main() {
-	mut flags:=print_input|0*print_tokens|0*print_ast|print_newast//|print_output
+	mut flags:=print_input|0*print_tokens|0*print_ast|0*print_newast|print_output
 	source:="    (add 2 2)
     (subtract 4 2)
-    (add 2 (subtract 4 2))"
+    (add 2 (subtract 4 2))
+"
 	for a in os.args {
 		if a=='--help'{usage()exit(0)}
 		if a=='--print-input'{flags|=print_input}
