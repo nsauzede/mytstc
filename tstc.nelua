@@ -274,19 +274,19 @@ local function transformer(ast: ASTNode):ASTNode
     return newAst
 end
 
-local function codeGenerator(node: ASTNode):string
+local function codeGenerator_c(node: ASTNode):string
     local sb:stringbuilder
     if node.type=='Program' then
         sb:write_string("int main() {\n")
         for i=0,<#node.u.Program.body do
-            sb:write_string(codeGenerator(node.u.Program.body[i]))
+            sb:write_string(codeGenerator_c(node.u.Program.body[i]))
         end
         sb:write_string("}\n")
     elseif node.type=='NumberLiteral' then
         sb:write_string(node.u.NumberLiteral.value)
     elseif node.type=='ExpressionStatement' then
         sb:write_string("\t")
-        sb:write_string(codeGenerator(node.u.ExpressionStatement.expression))
+        sb:write_string(codeGenerator_c(node.u.ExpressionStatement.expression))
         sb:write_string(";\n")
     elseif node.type=='Call' then
         sb:write_string(node.u.Call.callee.name)
@@ -295,7 +295,66 @@ local function codeGenerator(node: ASTNode):string
             if i>0 then
                 sb:write_string(", ")
             end
-            sb:write_string(codeGenerator(node.u.Call.arguments[i]))
+            sb:write_string(codeGenerator_c(node.u.Call.arguments[i]))
+        end
+        sb:write_string(")")
+    else
+        error(string.format("Code gen Type error: `%s`", node.type))
+    end
+    local output:stringview=sb
+    return output
+end
+
+local function codeGenerator_nelua(node: ASTNode):string
+    local sb:stringbuilder
+    if node.type=='Program' then
+        for i=0,<#node.u.Program.body do
+            sb:write_string(codeGenerator_nelua(node.u.Program.body[i]))
+        end
+    elseif node.type=='NumberLiteral' then
+        sb:write_string(node.u.NumberLiteral.value)
+    elseif node.type=='ExpressionStatement' then
+        sb:write_string(codeGenerator_nelua(node.u.ExpressionStatement.expression))
+        sb:write_string("\n")
+    elseif node.type=='Call' then
+        sb:write_string(node.u.Call.callee.name)
+        sb:write_string("(")
+        for i=0,<#node.u.Call.arguments do
+            if i>0 then
+                sb:write_string(", ")
+            end
+            sb:write_string(codeGenerator_nelua(node.u.Call.arguments[i]))
+        end
+        sb:write_string(")")
+    else
+        error(string.format("Code gen Type error: `%s`", node.type))
+    end
+    local output:stringview=sb
+    return output
+end
+
+local function codeGenerator_v(node: ASTNode):string
+    local sb:stringbuilder
+    if node.type=='Program' then
+        sb:write_string("fn main() {\n")
+        for i=0,<#node.u.Program.body do
+            sb:write_string(codeGenerator_v(node.u.Program.body[i]))
+        end
+        sb:write_string("}\n")
+    elseif node.type=='NumberLiteral' then
+        sb:write_string(node.u.NumberLiteral.value)
+    elseif node.type=='ExpressionStatement' then
+        sb:write_string("\t")
+        sb:write_string(codeGenerator_v(node.u.ExpressionStatement.expression))
+        sb:write_string("\n")
+    elseif node.type=='Call' then
+        sb:write_string(node.u.Call.callee.name)
+        sb:write_string("(")
+        for i=0,<#node.u.Call.arguments do
+            if i>0 then
+                sb:write_string(", ")
+            end
+            sb:write_string(codeGenerator_v(node.u.Call.arguments[i]))
         end
         sb:write_string(")")
     else
@@ -311,6 +370,10 @@ local Flags = @enum {
     print_ast       = 0x04,
     print_newast    = 0x08,
     print_output    = 0x10,
+    output_c        = 0x20,
+    output_nelua    = 0x40,
+    output_v        = 0x80,
+    output_mask     = 0x20|0x40|0x80,
 }
 local function compiler(input: string, flags: integer):string
     local tokens=tokenizer(input)
@@ -319,7 +382,16 @@ local function compiler(input: string, flags: integer):string
     if 0~=flags&Flags.print_ast then print_AST(ast)end
     local newAst=transformer(ast)
     if 0~=flags&Flags.print_newast then print_AST(newAst)end
-    local output=codeGenerator(newAst)
+    local output:string=" "
+    if 0~=flags&Flags.output_c then
+        output=codeGenerator_c(newAst)
+    end
+    if 0~=flags&Flags.output_nelua then
+        output=codeGenerator_nelua(newAst)
+    end
+    if 0~=flags&Flags.output_v then
+        output=codeGenerator_v(newAst)
+    end
     return output
 end
 
@@ -334,6 +406,9 @@ local function usage()
 	print('   --print-ast\t\tDisplay the ast.')
 	print('   --print-newast\tDisplay the newast.')
 	print('   --print-output\tDisplay the generated output.')
+	print('   --output-c\t\tGenerates C.')
+	print('   --output-nelua\tGenerates Nelua.')
+	print('   --output-v\t\tGenerates V.')
 	print('')
 	print('For more information, please see:')
 	print('https://github.com/nsauzede/mytstc')
@@ -344,7 +419,7 @@ local source=[[
     (subtract 4 2)
     (add 2 (subtract 4 2))
 ]]
-local flags=0|Flags.print_input|0*Flags.print_tokens|0*Flags.print_ast|0*Flags.print_newast|Flags.print_output
+local flags=0|0*Flags.print_input|0*Flags.print_tokens|0*Flags.print_ast|0*Flags.print_newast|0*Flags.print_output|1*Flags.output_c
 for i=1,#arg do
     if arg[i]=='--help' then usage() os.exit(true) end
     if arg[i]=='--print-input' then flags=flags|Flags.print_input end
@@ -352,7 +427,13 @@ for i=1,#arg do
     if arg[i]=='--print-ast' then flags=flags|Flags.print_ast end
     if arg[i]=='--print-newast' then flags=flags|Flags.print_newast end
     if arg[i]=='--print-output' then flags=flags|Flags.print_output end
+    if arg[i]=='--output-c' then flags=(flags&~Flags.output_mask)|Flags.output_c end
+    if arg[i]=='--output-nelua' then flags=(flags&~Flags.output_mask)|Flags.output_nelua end
+    if arg[i]=='--output-v' then flags=(flags&~Flags.output_mask)|Flags.output_v end
 end
+--print('flags=',flags)
 if 0~=flags&Flags.print_input then io.stdout:writef("input=\\\n%s\n",source)end
 local output=compiler(source, flags)
 if 0~=flags&Flags.print_output then io.stdout:writef("output=\\\n%s\n",output)end
+--print("About to print output")
+io.stdout:writef("%s\n",output)

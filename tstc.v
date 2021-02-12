@@ -246,19 +246,19 @@ fn transformer(mut ast ASTNode) ASTNode {unsafe{
 	//println('newast body=${newast.program.body.len}')
 	return newast
 }}
-fn code_generator(node ASTNode) string {unsafe{
+fn code_generator_c(node ASTNode) string {unsafe{
 	mut sb:=strings.new_builder(1024)
 	if node.u.@type=='Program' {
 		sb.write('int main() {\n')
 		for e in node.program.body {
-			sb.write(code_generator(e))
+			sb.write(code_generator_c(e))
 		}
 		sb.write('}\n')
 	} else if node.u.@type=='NumberLiteral' {
 		sb.write(node.numberliteral.value)
 	} else if node.u.@type=='ExpressionStatement' {
 		sb.write('\t')
-		sb.write(code_generator(node.expressionstatement.expression))
+		sb.write(code_generator_c(node.expressionstatement.expression))
 		sb.write(';\n')
 	} else if node.u.@type=='Call' {
 		sb.write(node.call.callee.name)
@@ -267,7 +267,67 @@ fn code_generator(node ASTNode) string {unsafe{
 			if i>0 {
 				sb.write(', ')
 			}
-			sb.write(code_generator(e))
+			sb.write(code_generator_c(e))
+		}
+		sb.write(')')
+	} else {
+		panic('Code gen Type error: `${node.u.@type}`')
+	}
+	output:=sb.str()
+	sb.free()
+	return output
+}}
+fn code_generator_nelua(node ASTNode) string {unsafe{
+	mut sb:=strings.new_builder(1024)
+	if node.u.@type=='Program' {
+		for e in node.program.body {
+			sb.write(code_generator_nelua(e))
+		}
+		//sb.write('\n')
+	} else if node.u.@type=='NumberLiteral' {
+		sb.write(node.numberliteral.value)
+	} else if node.u.@type=='ExpressionStatement' {
+		sb.write(code_generator_nelua(node.expressionstatement.expression))
+		sb.write('\n')
+	} else if node.u.@type=='Call' {
+		sb.write(node.call.callee.name)
+		sb.write('(')
+		for i,e in node.call.arguments {
+			if i>0 {
+				sb.write(', ')
+			}
+			sb.write(code_generator_nelua(e))
+		}
+		sb.write(')')
+	} else {
+		panic('Code gen Type error: `${node.u.@type}`')
+	}
+	output:=sb.str()
+	sb.free()
+	return output
+}}
+fn code_generator_v(node ASTNode) string {unsafe{
+	mut sb:=strings.new_builder(1024)
+	if node.u.@type=='Program' {
+		sb.write('fn main() {\n')
+		for e in node.program.body {
+			sb.write(code_generator_v(e))
+		}
+		sb.write('}\n')
+	} else if node.u.@type=='NumberLiteral' {
+		sb.write(node.numberliteral.value)
+	} else if node.u.@type=='ExpressionStatement' {
+		sb.write('\t')
+		sb.write(code_generator_v(node.expressionstatement.expression))
+		sb.write('\n')
+	} else if node.u.@type=='Call' {
+		sb.write(node.call.callee.name)
+		sb.write('(')
+		for i,e in node.call.arguments {
+			if i>0 {
+				sb.write(', ')
+			}
+			sb.write(code_generator_v(e))
 		}
 		sb.write(')')
 	} else {
@@ -288,6 +348,10 @@ const (
 	print_ast		=0x04
 	print_newast	=0x08
 	print_output	=0x10
+	output_c		=0x20
+	output_nelua	=0x40
+	output_v		=0x80
+	output_mask		=output_c|output_nelua|output_v
 )
 fn compiler(input string, flags int) string {
 	tokens:=tokenizer(input)
@@ -296,7 +360,16 @@ fn compiler(input string, flags int) string {
 	if 0!=flags&print_ast {print_ast(ast)}
 	newast:=transformer(mut ast)
 	if 0!=flags&print_newast {print_ast(newast)}
-	output:=code_generator(newast)
+	mut output:=''
+	if 0!=flags&output_c {
+		output=code_generator_c(newast)
+	}
+	if 0!=flags&output_nelua {
+		output=code_generator_nelua(newast)
+	}
+	if 0!=flags&output_v {
+		output=code_generator_v(newast)
+	}
 	return output
 }
 fn usage() {
@@ -310,12 +383,15 @@ fn usage() {
 	println('   --print-ast\t\tDisplay the ast.')
 	println('   --print-newast\tDisplay the newast.')
 	println('   --print-output\tDisplay the generated output.')
+	println('   --output-c\t\tGenerates C.')
+	println('   --output-nelua\tGenerates Nelua.')
+	println('   --output-v\t\tGenerates V.')
 	println('')
 	println('For more information, please see:')
 	println('https://github.com/nsauzede/mytstc')
 }
 fn main() {
-	mut flags:=print_input|0*print_tokens|0*print_ast|0*print_newast|print_output
+	mut flags:=0|0*print_input|0*print_tokens|0*print_ast|0*print_newast|0*print_output|1*output_c
 	source:="    (add 2 2)
     (subtract 4 2)
     (add 2 (subtract 4 2))
@@ -327,8 +403,13 @@ fn main() {
 		if a=='--print-ast'{flags|=print_ast}
 		if a=='--print-newast'{flags|=print_newast}
 		if a=='--print-output'{flags|=print_output}
+		if a=='--output-c'{flags=(flags&~output_mask)|output_c}
+		if a=='--output-nelua'{flags=(flags&~output_mask)|output_nelua}
+		if a=='--output-v'{flags=(flags&~output_mask)|output_v}
 	}
+	//println('flags=${flags:x}')
 	if 0!=flags&print_input{println('input=\\\n$source')}
 	output:=compiler(source,flags)
 	if 0!=flags&print_output{println('output=\\\n$output')}
+	println(output)
 }
