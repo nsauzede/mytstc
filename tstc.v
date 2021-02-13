@@ -1,6 +1,7 @@
 module main
 import os
 import strings
+
 struct Token {
 	@type string
 	value string
@@ -14,49 +15,52 @@ struct Callee {
 struct ASTNodeGeneric {
 mut:
 	@type string
-	ctxt &[]&ASTNode = voidptr(0)
+	ctxt &ASTNode = voidptr(0)
+	arr []&ASTNode
 }
 struct Program {
 mut:
 	@type string = 'Program'
-	ctxt &[]&ASTNode = voidptr(0)
-
+	ctxt &ASTNode = voidptr(0)
 	body []&ASTNode
 }
 struct NumberLiteral {
 	@type string = 'NumberLiteral'
-	ctxt &[]&ASTNode = voidptr(0)
+	ctxt &ASTNode = voidptr(0)
+	arr []&ASTNode
 
 	value string
 }
 struct StringLiteral {
 	@type string = 'StringLiteral'
-	ctxt &[]&ASTNode = voidptr(0)
+	ctxt &ASTNode = voidptr(0)
+	arr []&ASTNode
 
 	value string
 }
 struct CallExpression {
 mut:
 	@type string = 'CallExpression'
-	ctxt &[]&ASTNode = voidptr(0)
+	ctxt &ASTNode = voidptr(0)
+	params []&ASTNode
 
 	name string
-	params []&ASTNode
 }
 struct ExpressionStatement {
 mut:
 	@type string = 'ExpressionStatement'
-	ctxt &[]&ASTNode = voidptr(0)
+	ctxt &ASTNode = voidptr(0)
+	arr []&ASTNode
 
 	expression &ASTNode = voidptr(0)
 }
 struct Call {
 mut:
 	@type string = 'Call'
-	ctxt &[]&ASTNode = voidptr(0)
+	ctxt &ASTNode = voidptr(0)
+	arguments []&ASTNode
 
 	callee Callee
-	arguments []&ASTNode
 }
 
 union ASTNode {
@@ -105,18 +109,23 @@ fn print_ast_r(node ASTNode, nest int) {unsafe {
 		}
 	}
 }}
+
 fn print_ast(ast ASTNode) {
 	print_ast_r(ast, 0)
 }
+
 fn is_space(c byte) bool {
 	return c==` ` || c==`\n`
 }
+
 fn is_number(c byte) bool {
 	return c>=`0` && c<=`9`
 }
+
 fn is_letter(c byte) bool {
 	return c>=`a` && c<=`z`
 }
+
 fn tokenizer(input string) []Token {
 	mut current:=0
 	mut tokens:=[]Token{}
@@ -160,6 +169,7 @@ fn tokenizer(input string) []Token {
 	}
 	return tokens
 }
+
 fn walk(current int, tokens []Token) (int,&ASTNode) {unsafe{
 	mut token:=tokens[current]
 	if token.@type=='number' {
@@ -188,6 +198,7 @@ fn walk(current int, tokens []Token) (int,&ASTNode) {unsafe{
 	}
 	panic('walk: Type error: `${token.@type}` ${token.value}')
 }}
+
 fn parser(tokens []Token) ASTNode {unsafe{
 	mut ast:=ASTNode{program:{}}
 	mut current:=0
@@ -198,6 +209,7 @@ fn parser(tokens []Token) ASTNode {unsafe{
 	}
 	return ast
 }}
+
 fn traverse_node(mut node ASTNode, parent &ASTNode) {unsafe{
 	//println('hello traverse_node=${voidptr(node)} ${node.u.@type}')
 	if node.u.@type=='NumberLiteral' {
@@ -206,19 +218,19 @@ fn traverse_node(mut node ASTNode, parent &ASTNode) {unsafe{
 			if parent.u.ctxt!=voidptr(0) {
 				//print(' ctx=${voidptr(parent.u.ctxt)}')
 				//print(' pushing nlit=${node.numberliteral.value}')
-				parent.u.ctxt<<&ASTNode{numberliteral:{value:node.numberliteral.value}}
+				parent.u.ctxt.u.arr<<&ASTNode{numberliteral:{value:node.numberliteral.value}}
 			}
 			//println('')
 		}
 	}
 	if node.u.@type=='CallExpression' {
 		mut expression:=&ASTNode{call:{callee:{@type:'Identifier',name:node.callexpression.name}}}
-		node.u.ctxt=&expression.call.arguments
+		node.u.ctxt=expression
 		if parent.u.@type!='CallExpression' {
 			expression2:=&ASTNode{expressionstatement:{expression:expression}}
-			parent.u.ctxt<<expression2
+			parent.u.ctxt.u.arr<<expression2
 		} else {
-			parent.u.ctxt<<expression
+			parent.u.ctxt.u.arr<<expression
 		}
 	}
 	if node.u.@type=='Program' {
@@ -236,16 +248,19 @@ fn traverse_node(mut node ASTNode, parent &ASTNode) {unsafe{
 		panic('Type error: `${node.u.@type}`')
 	}
 }}
+
 fn traverser(mut ast ASTNode) {
 	traverse_node(mut ast, voidptr(0))
 }
+
 fn transformer(mut ast ASTNode) ASTNode {unsafe{
 	mut newast:=ASTNode{program:{}}
-	ast.u.ctxt=&newast.program.body
+	ast.u.ctxt=&newast
 	traverser(mut ast)
 	//println('newast body=${newast.program.body.len}')
 	return newast
 }}
+
 fn code_generator_c(node ASTNode) string {unsafe{
 	mut sb:=strings.new_builder(1024)
 	if node.u.@type=='Program' {
@@ -277,6 +292,7 @@ fn code_generator_c(node ASTNode) string {unsafe{
 	sb.free()
 	return output
 }}
+
 fn code_generator_nelua(node ASTNode) string {unsafe{
 	mut sb:=strings.new_builder(1024)
 	if node.u.@type=='Program' {
@@ -306,6 +322,7 @@ fn code_generator_nelua(node ASTNode) string {unsafe{
 	sb.free()
 	return output
 }}
+
 fn code_generator_v(node ASTNode) string {unsafe{
 	mut sb:=strings.new_builder(1024)
 	if node.u.@type=='Program' {
@@ -337,11 +354,13 @@ fn code_generator_v(node ASTNode) string {unsafe{
 	sb.free()
 	return output
 }}
+
 fn print_tokens(tokens []Token) {
 	for i:=0;i<tokens.len;i++ {
 		println('${tokens[i].@type}\t${tokens[i].value}')
 	}
 }
+
 const (
 	print_input		=0x01
 	print_tokens	=0x02
@@ -353,6 +372,7 @@ const (
 	output_v		=0x80
 	output_mask		=output_c|output_nelua|output_v
 )
+
 fn compiler(input string, flags int) string {
 	tokens:=tokenizer(input)
 	if 0!=flags&print_tokens {print_tokens(tokens)}
@@ -372,12 +392,14 @@ fn compiler(input string, flags int) string {
 	}
 	return output
 }
+
 fn usage() {
 	prog:=os.args[0]
 	println('Usage: $prog [options]')
 	println('')
 	println('Options:')
 	println('   --help\t\tDisplay this information.')
+	println('   -i "CODE"\t\tUse provided CODE as source input.')
 	println('   --print-input\tDisplay the source input.')
 	println('   --print-tokens\tDisplay the tokens.')
 	println('   --print-ast\t\tDisplay the ast.')
@@ -390,14 +412,18 @@ fn usage() {
 	println('For more information, please see:')
 	println('https://github.com/nsauzede/mytstc')
 }
+
 fn main() {
 	mut flags:=0|0*print_input|0*print_tokens|0*print_ast|0*print_newast|0*print_output|1*output_c
-	source:="    (add 2 2)
+	mut source:="    (add 2 2)
     (subtract 4 2)
     (add 2 (subtract 4 2))
 "
+	mut set_input:=false
 	for a in os.args {
+		if set_input {set_input = false source = a continue}
 		if a=='--help'{usage()exit(0)}
+		if a=='-i'{set_input=true continue}
 		if a=='--print-input'{flags|=print_input}
 		if a=='--print-tokens'{flags|=print_tokens}
 		if a=='--print-ast'{flags|=print_ast}

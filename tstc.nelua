@@ -5,10 +5,12 @@ require 'C.stdio'
 require 'io'
 require 'arg'
 require 'os'
+
 local Token:type=@record{
     type:string,
     value:string,
 }
+
 local ASTNode=@record{
     type:string,
     u:union{
@@ -375,6 +377,7 @@ local Flags = @enum {
     output_v        = 0x80,
     output_mask     = 0x20|0x40|0x80,
 }
+
 local function compiler(input: string, flags: integer):string
     local tokens=tokenizer(input)
     if 0~=flags&Flags.print_tokens then print_tokens(tokens)end
@@ -401,6 +404,7 @@ local function usage()
 	print('')
 	print('Options:')
 	print('   --help\t\tDisplay this information.')
+	print('   -i "CODE"\t\tUse the provided CODE as source input.')
 	print('   --print-input\tDisplay the source input.')
 	print('   --print-tokens\tDisplay the tokens.')
 	print('   --print-ast\t\tDisplay the ast.')
@@ -420,8 +424,11 @@ local source=[[
     (add 2 (subtract 4 2))
 ]]
 local flags=0|0*Flags.print_input|0*Flags.print_tokens|0*Flags.print_ast|0*Flags.print_newast|0*Flags.print_output|1*Flags.output_c
+local set_input=false
 for i=1,#arg do
+    if set_input then set_input=false source=arg[i] continue end
     if arg[i]=='--help' then usage() os.exit(true) end
+    if arg[i]=='-i' then set_input=true continue end
     if arg[i]=='--print-input' then flags=flags|Flags.print_input end
     if arg[i]=='--print-tokens' then flags=flags|Flags.print_tokens end
     if arg[i]=='--print-ast' then flags=flags|Flags.print_ast end
