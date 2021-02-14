@@ -362,11 +362,11 @@ fn code_generator_nelua(node ASTNode) string {unsafe{
 		sb.writeln('')
 	} else if node.u.@type=='Call' {
 		name:= match node.call.callee.name {
-			'write' {'print'}
 			'+' {'add'}
 			'-' {'subtract'}
 			'*' {'multiply'}
 			'/' {'divide'}
+			'write' {'print'}
 			else{node.call.callee.name}
 		}
 		sb.write(name)

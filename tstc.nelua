@@ -85,7 +85,14 @@ local function print_AST(ast: ASTNode) print_AST_R(ast, 0) end
 
 local function is_space(c:byte) return c==' '_byte or c<='\n'_byte end
 local function is_number(c:byte) return c>='0'_byte and c<='9'_byte end
-local function is_letter(c:byte) return c>='a'_byte and c<='z'_byte end
+
+local function is_letter(c:byte)
+    return (c>='a'_byte and c<='z'_byte)
+    or c=='+'_byte
+    or c=='-'_byte
+    or c=='*'_byte
+    or c=='/'_byte
+end
 
 local function tokenizer(input: string): vector(Token)
     local current=0
@@ -133,6 +140,11 @@ local function tokenizer(input: string): vector(Token)
     return tokens
 end
 
+local use_add=false
+local use_subtract=false
+local use_multiply=false
+local use_divide=false
+local use_print=false
 local function parser(tokens: vector(Token)): ASTNode
     local function walk(current: integer, tokens:vector(Token))
         local token = tokens[current]
@@ -167,6 +179,11 @@ local function parser(tokens: vector(Token)): ASTNode
                     },
                 },
             }
+            if token.value == '+' then use_add=true end
+            if token.value == '-' then use_subtract=true end
+            if token.value == '*' then use_multiply=true end
+            if token.value == '/' then use_divide=true end
+            if token.value == 'write' or token.value == 'print' then use_print=true end
             current=current+1
             token=tokens[current]
             while token.type ~= 'paren' or (token.type == 'paren' and token.value ~= ')') do
@@ -310,6 +327,18 @@ end
 local function codeGenerator_nelua(node: ASTNode):string
     local sb:stringbuilder
     if node.type=='Program' then
+        if use_add then
+            sb:write_string("local function add(a: float32, b: float32): float32 return a + b end\n")
+        end
+		if use_subtract then
+			sb:write_string("local function subtract(a: float32, b: float32): float32 return a - b end\n")
+		end
+		if use_multiply then
+			sb:write_string("local function multiply(a: float32, b: float32): float32 return a * b end\n")
+		end
+		if use_divide then
+			sb:write_string("local function divide(a: float32, b: float32): float32 return a / b end\n")
+		end
         for i=0,<#node.u.Program.body do
             sb:write_string(codeGenerator_nelua(node.u.Program.body[i]))
         end
@@ -319,7 +348,15 @@ local function codeGenerator_nelua(node: ASTNode):string
         sb:write_string(codeGenerator_nelua(node.u.ExpressionStatement.expression))
         sb:write_string("\n")
     elseif node.type=='Call' then
-        sb:write_string(node.u.Call.callee.name)
+        local name:string=node.u.Call.callee.name
+        if name=='+' then name = 'add' end
+        if name=='-' then name = 'subtract' end
+        if name=='*' then name = 'multiply' end
+        if name=='/' then name = 'divide' end
+        if name=='write'
+        --or name=='print'
+        then name = 'print' end
+        sb:write_string(name)
         sb:write_string("(")
         for i=0,<#node.u.Call.arguments do
             if i>0 then
@@ -418,8 +455,7 @@ local function usage()
 	print('https://github.com/nsauzede/mytstc')
 end
 
---local source=[[(write(+ (* (/ 9 5) 60) 32))]]
-local source=[[(write(add (multiply (divide 9 5) 60) 32))]]
+local source=[[(write(+ (* (/ 9 5) 60) 32))]]
 local flags=0|0*Flags.print_input|0*Flags.print_tokens|0*Flags.print_ast|0*Flags.print_newast|0*Flags.print_output|1*Flags.output_c
 local set_input=false
 for i=1,#arg do
