@@ -74,6 +74,12 @@ mut:
 	call Call
 }
 
+fn print_tokens(tokens []Token) {
+	for i:=0;i<tokens.len;i++ {
+		println('${tokens[i].@type}\t${tokens[i].value}')
+	}
+}
+
 fn print_ast_r(node ASTNode, nest int) {unsafe {
 	for i:=0;i<nest;i++ {
 		print('\t')
@@ -172,6 +178,13 @@ fn tokenizer(input string) []Token {
 	return tokens
 }
 
+__global (
+	use_add=bool(false)
+	use_subtract=bool(false)
+	use_multiply=bool(false)
+	use_divide=bool(false)
+	use_print=bool(false)
+)
 fn walk(current int, tokens []Token) (int,&ASTNode) {unsafe{
 	mut token:=tokens[current]
 	if token.@type=='number' {
@@ -188,6 +201,14 @@ fn walk(current int, tokens []Token) (int,&ASTNode) {unsafe{
 		current++
 		token=tokens[current]
 		mut node := &ASTNode{callexpression:{name:token.value}}
+		match token.value {
+			'+' {use_add=true}
+			'-' {use_subtract=true}
+			'*' {use_multiply=true}
+			'/' {use_divide=true}
+			'write','print' {use_print=true}
+			else{}
+		}
 		current++
 		token=tokens[current]
 		for token.@type!='paren' || (token.@type=='paren' && token.value!=')') {
@@ -213,16 +234,11 @@ fn parser(tokens []Token) ASTNode {unsafe{
 }}
 
 fn traverse_node(mut node ASTNode, parent &ASTNode) {unsafe{
-	//println('hello traverse_node=${voidptr(node)} ${node.u.@type}')
 	if node.u.@type=='NumberLiteral' {
 		if parent!=voidptr(0) {
-			//print(' parent=${voidptr(parent)}')
 			if parent.u.ctxt!=voidptr(0) {
-				//print(' ctx=${voidptr(parent.u.ctxt)}')
-				//print(' pushing nlit=${node.numberliteral.value}')
 				parent.u.ctxt.u.arr<<&ASTNode{numberliteral:{value:node.numberliteral.value}}
 			}
-			//println('')
 		}
 	}
 	if node.u.@type=='CallExpression' {
@@ -236,7 +252,6 @@ fn traverse_node(mut node ASTNode, parent &ASTNode) {unsafe{
 		}
 	}
 	if node.u.@type=='Program' {
-		//println('traversing body.. ${node.program.body.len}')
 		for e in node.program.body {
 			traverse_node(mut e, node)
 		}
@@ -259,19 +274,30 @@ fn transformer(mut ast ASTNode) ASTNode {unsafe{
 	mut newast:=ASTNode{program:{}}
 	ast.u.ctxt=&newast
 	traverser(mut ast)
-	//println('newast body=${newast.program.body.len}')
 	return newast
 }}
 
 fn code_generator_c(node ASTNode) string {unsafe{
 	mut sb:=strings.new_builder(1024)
 	if node.u.@type=='Program' {
-		sb.writeln('#include <stdio.h>')
-		sb.writeln('float add(float a, float b) {return a + b;}')
-		sb.writeln('float subtract(float a, float b) {return a - b;}')
-		sb.writeln('float multiply(float a, float b) {return a * b;}')
-		sb.writeln('float divide(float a, float b) {return a / b;}')
-		sb.writeln('void println(float a) {printf("%f\\n", (double)a);}')
+		if use_print {
+			sb.writeln('#include <stdio.h>')
+		}
+		if use_add {
+			sb.writeln('float add(float a, float b) {return a + b;}')
+		}
+		if use_subtract {
+			sb.writeln('float subtract(float a, float b) {return a - b;}')
+		}
+		if use_multiply {
+			sb.writeln('float multiply(float a, float b) {return a * b;}')
+		}
+		if use_divide {
+			sb.writeln('float divide(float a, float b) {return a / b;}')
+		}
+		if use_print {
+			sb.writeln('void println(float a) {printf("%f\\n", (double)a);}')
+		}
 		sb.writeln('int main() {')
 		for e in node.program.body {
 			sb.write(code_generator_c(e))
@@ -314,10 +340,18 @@ fn code_generator_c(node ASTNode) string {unsafe{
 fn code_generator_nelua(node ASTNode) string {unsafe{
 	mut sb:=strings.new_builder(1024)
 	if node.u.@type=='Program' {
-		sb.writeln('local function add(a: float32, b: float32): float32 return a + b end')
-		sb.writeln('local function subtract(a: float32, b: float32): float32 return a - b end')
-		sb.writeln('local function multiply(a: float32, b: float32): float32 return a * b end')
-		sb.writeln('local function divide(a: float32, b: float32): float32 return a / b end')
+		if use_add {
+			sb.writeln('local function add(a: float32, b: float32): float32 return a + b end')
+		}
+		if use_subtract {
+			sb.writeln('local function subtract(a: float32, b: float32): float32 return a - b end')
+		}
+		if use_multiply {
+			sb.writeln('local function multiply(a: float32, b: float32): float32 return a * b end')
+		}
+		if use_divide {
+			sb.writeln('local function divide(a: float32, b: float32): float32 return a / b end')
+		}
 		for e in node.program.body {
 			sb.write(code_generator_nelua(e))
 		}
@@ -328,7 +362,6 @@ fn code_generator_nelua(node ASTNode) string {unsafe{
 		sb.writeln('')
 	} else if node.u.@type=='Call' {
 		name:= match node.call.callee.name {
-			//'print' {'print'}
 			'write' {'print'}
 			'+' {'add'}
 			'-' {'subtract'}
@@ -356,24 +389,24 @@ fn code_generator_nelua(node ASTNode) string {unsafe{
 fn code_generator_v(node ASTNode) string {unsafe{
 	mut sb:=strings.new_builder(1024)
 	if node.u.@type=='Program' {
-		sb.writeln('fn add(a f32, b f32) f32 {return a + b}')
-		sb.writeln('fn subtract(a f32, b f32) f32 {return a - b}')
-		sb.writeln('fn multiply(a f32, b f32) f32 {return a * b}')
-		sb.writeln('fn divide(a f32, b f32) f32 {return a / b}')
-		//sb.writeln('fn main() {')
-		//sb.writeln('\t')
-		//sb.writeln('mut ret:=0')
+		if use_add {
+			sb.writeln('fn add(a f32, b f32) f32 {return a + b}')
+		}
+		if use_subtract {
+			sb.writeln('fn subtract(a f32, b f32) f32 {return a - b}')
+		}
+		if use_multiply {
+			sb.writeln('fn multiply(a f32, b f32) f32 {return a * b}')
+		}
+		if use_divide {
+			sb.writeln('fn divide(a f32, b f32) f32 {return a / b}')
+		}
 		for e in node.program.body {
 			sb.write(code_generator_v(e))
 		}
-		//sb.writeln('\t')
-		//sb.writeln('exit(ret)')
-		//sb.writeln('}')
 	} else if node.u.@type=='NumberLiteral' {
 		sb.write(node.numberliteral.value)
 	} else if node.u.@type=='ExpressionStatement' {
-		//sb.write('\t')
-		//sb.write('ret=')
 		sb.write(code_generator_v(node.expressionstatement.expression))
 		sb.writeln('')
 	} else if node.u.@type=='Call' {
@@ -402,12 +435,6 @@ fn code_generator_v(node ASTNode) string {unsafe{
 	sb.free()
 	return output
 }}
-
-fn print_tokens(tokens []Token) {
-	for i:=0;i<tokens.len;i++ {
-		println('${tokens[i].@type}\t${tokens[i].value}')
-	}
-}
 
 const (
 	print_input		= 0x01
@@ -478,7 +505,6 @@ fn main() {
 		if a=='--output-nelua'{flags=(flags&~output_mask)|output_nelua}
 		if a=='--output-v'{flags=(flags&~output_mask)|output_v}
 	}
-	//println('flags=${flags:x}')
 	if 0!=flags&print_input{println('input=\\\n$source')}
 	output:=compiler(source,flags)
 	if 0!=flags&print_output{println('output=\\\n$output')}

@@ -41,6 +41,12 @@ local ASTNode=@record{
     _context:*vector(*ASTNode),
 }
 
+local function print_tokens(tokens:vector(Token))
+    for t=0,<#tokens do
+        print(tokens[t].type,tokens[t].value)
+    end
+end
+
 local function print_AST_R(node: ASTNode, nest: integer)
     for i=0,<nest do
         io.stdout:write("\t")
@@ -76,12 +82,6 @@ local function print_AST_R(node: ASTNode, nest: integer)
 end
 
 local function print_AST(ast: ASTNode) print_AST_R(ast, 0) end
-
-local function print_tokens(tokens:vector(Token))
-    for t=0,<#tokens do
-        print(tokens[t].type,tokens[t].value)
-    end
-end
 
 local function is_space(c:byte) return c==' '_byte or c<='\n'_byte end
 local function is_number(c:byte) return c>='0'_byte and c<='9'_byte end
@@ -338,15 +338,15 @@ end
 local function codeGenerator_v(node: ASTNode):string
     local sb:stringbuilder
     if node.type=='Program' then
-        sb:write_string("fn main() {\n")
+        --sb:write_string("fn main() {\n")
         for i=0,<#node.u.Program.body do
             sb:write_string(codeGenerator_v(node.u.Program.body[i]))
         end
-        sb:write_string("}\n")
+        --sb:write_string("}\n")
     elseif node.type=='NumberLiteral' then
         sb:write_string(node.u.NumberLiteral.value)
     elseif node.type=='ExpressionStatement' then
-        sb:write_string("\t")
+        --sb:write_string("\t")
         sb:write_string(codeGenerator_v(node.u.ExpressionStatement.expression))
         sb:write_string("\n")
     elseif node.type=='Call' then
@@ -418,11 +418,8 @@ local function usage()
 	print('https://github.com/nsauzede/mytstc')
 end
 
-local source=[[
-    (add 2 2)
-    (subtract 4 2)
-    (add 2 (subtract 4 2))
-]]
+--local source=[[(write(+ (* (/ 9 5) 60) 32))]]
+local source=[[(write(add (multiply (divide 9 5) 60) 32))]]
 local flags=0|0*Flags.print_input|0*Flags.print_tokens|0*Flags.print_ast|0*Flags.print_newast|0*Flags.print_output|1*Flags.output_c
 local set_input=false
 for i=1,#arg do
@@ -438,9 +435,7 @@ for i=1,#arg do
     if arg[i]=='--output-nelua' then flags=(flags&~Flags.output_mask)|Flags.output_nelua end
     if arg[i]=='--output-v' then flags=(flags&~Flags.output_mask)|Flags.output_v end
 end
---print('flags=',flags)
 if 0~=flags&Flags.print_input then io.stdout:writef("input=\\\n%s\n",source)end
 local output=compiler(source, flags)
 if 0~=flags&Flags.print_output then io.stdout:writef("output=\\\n%s\n",output)end
---print("About to print output")
 io.stdout:writef("%s\n",output)
