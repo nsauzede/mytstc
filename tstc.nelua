@@ -404,7 +404,7 @@ local function usage()
 	print('')
 	print('Options:')
 	print('   --help\t\tDisplay this information.')
-	print('   -i "CODE"\t\tUse the provided CODE as source input.')
+	print('   -x "CODE"\t\tUse the provided CODE as source input.')
 	print('   --print-input\tDisplay the source input.')
 	print('   --print-tokens\tDisplay the tokens.')
 	print('   --print-ast\t\tDisplay the ast.')
@@ -428,7 +428,7 @@ local set_input=false
 for i=1,#arg do
     if set_input then set_input=false source=arg[i] continue end
     if arg[i]=='--help' then usage() os.exit(true) end
-    if arg[i]=='-i' then set_input=true continue end
+    if arg[i]=='-x' then set_input=true continue end
     if arg[i]=='--print-input' then flags=flags|Flags.print_input end
     if arg[i]=='--print-tokens' then flags=flags|Flags.print_tokens end
     if arg[i]=='--print-ast' then flags=flags|Flags.print_ast end

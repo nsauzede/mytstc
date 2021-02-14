@@ -98,12 +98,9 @@ fn print_ast_r(node ASTNode, nest int) {unsafe {
 		print_ast_r(node.expressionstatement.expression, nest + 1)
 	}
 	if node.u.@type=='Call' {
-		//print(' node=${voidptr(&node)} type=${node.call.callee.@type}')
 		print(' callee type=${node.call.callee.@type}')
 		print(' name=${node.call.callee.name}')
-		//print(' args=${voidptr(&node.call.arguments)}:${node.call.arguments.len}=\\\n')
-		//print(' arguments:${node.call.arguments.len}=\\\n')
-		print(' arguments=\\\n')
+		println(' arguments=\\')
 		for e in node.call.arguments {
 			print_ast_r(e, nest + 1)
 		}
@@ -123,7 +120,12 @@ fn is_number(c byte) bool {
 }
 
 fn is_letter(c byte) bool {
-	return c>=`a` && c<=`z`
+	return
+	(c>=`a` && c<=`z`)
+	|| c==`+`
+	|| c==`-`
+	|| c==`*`
+	|| c==`/`
 }
 
 fn tokenizer(input string) []Token {
@@ -264,19 +266,35 @@ fn transformer(mut ast ASTNode) ASTNode {unsafe{
 fn code_generator_c(node ASTNode) string {unsafe{
 	mut sb:=strings.new_builder(1024)
 	if node.u.@type=='Program' {
-		sb.write('int main() {\n')
+		sb.writeln('#include <stdio.h>')
+		sb.writeln('float add(float a, float b) {return a + b;}')
+		sb.writeln('float subtract(float a, float b) {return a - b;}')
+		sb.writeln('float multiply(float a, float b) {return a * b;}')
+		sb.writeln('float divide(float a, float b) {return a / b;}')
+		sb.writeln('void println(float a) {printf("%f\\n", (double)a);}')
+		sb.writeln('int main() {')
 		for e in node.program.body {
 			sb.write(code_generator_c(e))
 		}
-		sb.write('}\n')
+		sb.writeln('\treturn 0;')
+		sb.writeln('}')
 	} else if node.u.@type=='NumberLiteral' {
 		sb.write(node.numberliteral.value)
 	} else if node.u.@type=='ExpressionStatement' {
 		sb.write('\t')
 		sb.write(code_generator_c(node.expressionstatement.expression))
-		sb.write(';\n')
+		sb.writeln(';')
 	} else if node.u.@type=='Call' {
-		sb.write(node.call.callee.name)
+		name:= match node.call.callee.name {
+			'print' {'println'}
+			'write' {'println'}
+			'+' {'add'}
+			'-' {'subtract'}
+			'*' {'multiply'}
+			'/' {'divide'}
+			else{node.call.callee.name}
+		}
+		sb.write(name)
 		sb.write('(')
 		for i,e in node.call.arguments {
 			if i>0 {
@@ -296,17 +314,29 @@ fn code_generator_c(node ASTNode) string {unsafe{
 fn code_generator_nelua(node ASTNode) string {unsafe{
 	mut sb:=strings.new_builder(1024)
 	if node.u.@type=='Program' {
+		sb.writeln('local function add(a: float32, b: float32): float32 return a + b end')
+		sb.writeln('local function subtract(a: float32, b: float32): float32 return a - b end')
+		sb.writeln('local function multiply(a: float32, b: float32): float32 return a * b end')
+		sb.writeln('local function divide(a: float32, b: float32): float32 return a / b end')
 		for e in node.program.body {
 			sb.write(code_generator_nelua(e))
 		}
-		//sb.write('\n')
 	} else if node.u.@type=='NumberLiteral' {
 		sb.write(node.numberliteral.value)
 	} else if node.u.@type=='ExpressionStatement' {
 		sb.write(code_generator_nelua(node.expressionstatement.expression))
-		sb.write('\n')
+		sb.writeln('')
 	} else if node.u.@type=='Call' {
-		sb.write(node.call.callee.name)
+		name:= match node.call.callee.name {
+			//'print' {'print'}
+			'write' {'print'}
+			'+' {'add'}
+			'-' {'subtract'}
+			'*' {'multiply'}
+			'/' {'divide'}
+			else{node.call.callee.name}
+		}
+		sb.write(name)
 		sb.write('(')
 		for i,e in node.call.arguments {
 			if i>0 {
@@ -326,19 +356,37 @@ fn code_generator_nelua(node ASTNode) string {unsafe{
 fn code_generator_v(node ASTNode) string {unsafe{
 	mut sb:=strings.new_builder(1024)
 	if node.u.@type=='Program' {
-		sb.write('fn main() {\n')
+		sb.writeln('fn add(a f32, b f32) f32 {return a + b}')
+		sb.writeln('fn subtract(a f32, b f32) f32 {return a - b}')
+		sb.writeln('fn multiply(a f32, b f32) f32 {return a * b}')
+		sb.writeln('fn divide(a f32, b f32) f32 {return a / b}')
+		//sb.writeln('fn main() {')
+		//sb.writeln('\t')
+		//sb.writeln('mut ret:=0')
 		for e in node.program.body {
 			sb.write(code_generator_v(e))
 		}
-		sb.write('}\n')
+		//sb.writeln('\t')
+		//sb.writeln('exit(ret)')
+		//sb.writeln('}')
 	} else if node.u.@type=='NumberLiteral' {
 		sb.write(node.numberliteral.value)
 	} else if node.u.@type=='ExpressionStatement' {
-		sb.write('\t')
+		//sb.write('\t')
+		//sb.write('ret=')
 		sb.write(code_generator_v(node.expressionstatement.expression))
-		sb.write('\n')
+		sb.writeln('')
 	} else if node.u.@type=='Call' {
-		sb.write(node.call.callee.name)
+		name:= match node.call.callee.name {
+			'print' {'println'}
+			'write' {'println'}
+			'+' {'add'}
+			'-' {'subtract'}
+			'*' {'multiply'}
+			'/' {'divide'}
+			else{node.call.callee.name}
+		}
+		sb.write(name)
 		sb.write('(')
 		for i,e in node.call.arguments {
 			if i>0 {
@@ -362,15 +410,15 @@ fn print_tokens(tokens []Token) {
 }
 
 const (
-	print_input		=0x01
-	print_tokens	=0x02
-	print_ast		=0x04
-	print_newast	=0x08
-	print_output	=0x10
-	output_c		=0x20
-	output_nelua	=0x40
-	output_v		=0x80
-	output_mask		=output_c|output_nelua|output_v
+	print_input		= 0x01
+	print_tokens	= 0x02
+	print_ast		= 0x04
+	print_newast	= 0x08
+	print_output	= 0x10
+	output_c		= 0x20
+	output_nelua	= 0x40
+	output_v		= 0x80
+	output_mask		= output_c|output_nelua|output_v
 )
 
 fn compiler(input string, flags int) string {
@@ -399,7 +447,7 @@ fn usage() {
 	println('')
 	println('Options:')
 	println('   --help\t\tDisplay this information.')
-	println('   -i "CODE"\t\tUse provided CODE as source input.')
+	println('   -x "CODE"\t\tUse provided CODE as source input.')
 	println('   --print-input\tDisplay the source input.')
 	println('   --print-tokens\tDisplay the tokens.')
 	println('   --print-ast\t\tDisplay the ast.')
@@ -415,15 +463,12 @@ fn usage() {
 
 fn main() {
 	mut flags:=0|0*print_input|0*print_tokens|0*print_ast|0*print_newast|0*print_output|1*output_c
-	mut source:="    (add 2 2)
-    (subtract 4 2)
-    (add 2 (subtract 4 2))
-"
+	mut source:="(write(+ (* (/ 9 5) 60) 32))"
 	mut set_input:=false
 	for a in os.args {
 		if set_input {set_input = false source = a continue}
 		if a=='--help'{usage()exit(0)}
-		if a=='-i'{set_input=true continue}
+		if a=='-x'{set_input=true continue}
 		if a=='--print-input'{flags|=print_input}
 		if a=='--print-tokens'{flags|=print_tokens}
 		if a=='--print-ast'{flags|=print_ast}
