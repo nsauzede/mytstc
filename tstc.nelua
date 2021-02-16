@@ -189,7 +189,7 @@ local function parser(tokens: vector(Token)): ASTNode
             while token.type ~= 'paren' or (token.type == 'paren' and token.value ~= ')') do
                 local child:ASTNode
                 current,child=walk(current,tokens)
-                node.u.CallExpression.params:push(gc_allocator:new(child))
+                node.u.CallExpression.params:push(default_allocator:new(child))
                 token=tokens[current]
             end
             return current+1,node
@@ -203,7 +203,7 @@ local function parser(tokens: vector(Token)): ASTNode
     while current<#tokens do
         local node:ASTNode
         current,node=walk(current,tokens)
-        ast.u.Program.body:push(gc_allocator:new(node))
+        ast.u.Program.body:push(default_allocator:new(node))
     end
     return ast
 end
@@ -212,7 +212,7 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
     if node.type=='NumberLiteral' then
         if parent._context~=nilptr then
             local ctx:*vector(*ASTNode)=&$parent._context
-            ctx:push(gc_allocator:new(ASTNode{
+            ctx:push(default_allocator:new(ASTNode{
                 type='NumberLiteral',
                 u={
                     NumberLiteral={
@@ -224,7 +224,7 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
     end
     if node.type=='StringLiteral' then
         local ctx:*vector(*ASTNode)=&$parent._context
-        ctx:push(gc_allocator:new(ASTNode{
+        ctx:push(default_allocator:new(ASTNode{
             type='StringLiteral',
             u={
                 StringLiteral={
@@ -235,7 +235,7 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
         print('Done')
     end
     if node.type=='CallExpression' then
-        local expression=gc_allocator:new(ASTNode{
+        local expression=default_allocator:new(ASTNode{
             type='Call',
             u={
                 Call={
@@ -248,7 +248,7 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
         })
         node._context = &expression.u.Call.arguments
         if parent.type ~= 'CallExpression' then
-            local expression2=gc_allocator:new(ASTNode{
+            local expression2=default_allocator:new(ASTNode{
                 type='ExpressionStatement',
                 u={
                     ExpressionStatement={
