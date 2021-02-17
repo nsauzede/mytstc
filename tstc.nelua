@@ -11,7 +11,7 @@ local Token:type=@record{
     value:string,
 }
 
-local ASTNode=@record{
+local ASTNode <nocopy> =@record{
     type:string,
     u:union{
         Program:record{
@@ -47,7 +47,7 @@ local function print_tokens(tokens:vector(Token))
     end
 end
 
-local function print_AST_R(node: ASTNode, nest: integer)
+local function print_AST_R(node: *ASTNode, nest: integer)
     for i=0,<nest do
         io.stdout:write("\t")
     end
@@ -81,7 +81,7 @@ local function print_AST_R(node: ASTNode, nest: integer)
     end
 end
 
-local function print_AST(ast: ASTNode) print_AST_R(ast, 0) end
+local function print_AST(ast: *ASTNode) print_AST_R(ast, 0) end
 
 local function is_space(c:byte) return c==' '_byte or c<='\n'_byte end
 local function is_number(c:byte) return c>='0'_byte and c<='9'_byte end
@@ -145,11 +145,13 @@ local use_subtract=false
 local use_multiply=false
 local use_divide=false
 local use_print=false
+
 local function parser(tokens: vector(Token)): ASTNode
-    local function walk(current: integer, tokens:vector(Token))
+    local function walk(current: integer, tokens:vector(Token)): (integer,*ASTNode)
         local token = tokens[current]
         if token.type == 'number' then
-            return current+1,ASTNode{
+            local node:*ASTNode = default_allocator:new(@ASTNode)
+            $node = ASTNode{
                 type='NumberLiteral',
                 u={
                     NumberLiteral={
@@ -157,9 +159,11 @@ local function parser(tokens: vector(Token)): ASTNode
                     },
                 },
             }
+            return current+1,node
         end
         if token.type == 'string' then
-            return current+1,ASTNode{
+            local node:*ASTNode = default_allocator:new(@ASTNode)
+            $node = ASTNode{
                 type='StringLiteral',
                 u={
                     StringLiteral={
@@ -167,11 +171,13 @@ local function parser(tokens: vector(Token)): ASTNode
                     },
                 },
             }
+            return current+1,node
         end
         if token.type == 'paren' and token.value == '(' then
             current=current+1
             token=tokens[current]
-            local node = ASTNode{
+            local node:*ASTNode = default_allocator:new(@ASTNode)
+            $node = ASTNode{
                 type='CallExpression',
                 u={
                     CallExpression={
@@ -187,9 +193,9 @@ local function parser(tokens: vector(Token)): ASTNode
             current=current+1
             token=tokens[current]
             while token.type ~= 'paren' or (token.type == 'paren' and token.value ~= ')') do
-                local child:ASTNode
+                local child:*ASTNode
                 current,child=walk(current,tokens)
-                node.u.CallExpression.params:push(default_allocator:new(child))
+                node.u.CallExpression.params:push(child)
                 token=tokens[current]
             end
             return current+1,node
@@ -201,14 +207,14 @@ local function parser(tokens: vector(Token)): ASTNode
         'Program',
     }
     while current<#tokens do
-        local node:ASTNode
+        local node:*ASTNode
         current,node=walk(current,tokens)
-        ast.u.Program.body:push(default_allocator:new(node))
+        ast.u.Program.body:push(node)
     end
     return ast
 end
 
-local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
+local function traverseNode(node: *ASTNode, parent: *ASTNode)
     if node.type=='NumberLiteral' then
         if parent._context~=nilptr then
             local ctx:*vector(*ASTNode)=&$parent._context
@@ -280,11 +286,11 @@ local function traverseNode(node: ASTNode, parent: pointer(ASTNode))
     end
 end
 
-local function traverser(ast: ASTNode)
+local function traverser(ast: *ASTNode)
     traverseNode(ast, nilptr)
 end
 
-local function transformer(ast: ASTNode):ASTNode
+local function transformer(ast: *ASTNode): ASTNode
     local newAst = ASTNode{
         type='Program',
     }
@@ -293,7 +299,7 @@ local function transformer(ast: ASTNode):ASTNode
     return newAst
 end
 
-local function codeGenerator_c(node: ASTNode):string
+local function codeGenerator_c(node: *ASTNode):string
     local sb:stringbuilder
     if node.type=='Program' then
         sb:write_string("int main() {\n")
@@ -324,7 +330,7 @@ local function codeGenerator_c(node: ASTNode):string
     return output
 end
 
-local function codeGenerator_nelua(node: ASTNode):string
+local function codeGenerator_nelua(node: *ASTNode):string
     local sb:stringbuilder
     if node.type=='Program' then
         if use_add then
@@ -372,9 +378,21 @@ local function codeGenerator_nelua(node: ASTNode):string
     return output
 end
 
-local function codeGenerator_v(node: ASTNode):string
+local function codeGenerator_v(node: *ASTNode):string
     local sb:stringbuilder
     if node.type=='Program' then
+		if use_add then
+			sb:write_string('fn add(a f32, b f32) f32 {return a + b}\n')
+		end
+		if use_subtract then
+			sb:write_string('fn subtract(a f32, b f32) f32 {return a - b}\n')
+		end
+		if use_multiply then
+			sb:write_string('fn multiply(a f32, b f32) f32 {return a * b}\n')
+		end
+		if use_divide then
+			sb:write_string('fn divide(a f32, b f32) f32 {return a / b}\n')
+		end
         --sb:write_string("fn main() {\n")
         for i=0,<#node.u.Program.body do
             sb:write_string(codeGenerator_v(node.u.Program.body[i]))
@@ -387,7 +405,15 @@ local function codeGenerator_v(node: ASTNode):string
         sb:write_string(codeGenerator_v(node.u.ExpressionStatement.expression))
         sb:write_string("\n")
     elseif node.type=='Call' then
-        sb:write_string(node.u.Call.callee.name)
+        local name:string=node.u.Call.callee.name
+        if name=='+' then name = 'add' end
+        if name=='-' then name = 'subtract' end
+        if name=='*' then name = 'multiply' end
+        if name=='/' then name = 'divide' end
+        if name=='write'
+        or name=='print'
+        then name = 'println' end
+        sb:write_string(name)
         sb:write_string("(")
         for i=0,<#node.u.Call.arguments do
             if i>0 then
