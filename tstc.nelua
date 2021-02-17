@@ -302,10 +302,29 @@ end
 local function codeGenerator_c(node: *ASTNode):string
     local sb:stringbuilder
     if node.type=='Program' then
+		if use_print then
+			sb:write_string("#include <stdio.h>\n")
+		end
+		if use_add then
+			sb:write_string("float add(float a, float b) {return a + b;}\n")
+		end
+		if use_subtract then
+			sb:write_string("float subtract(float a, float b) {return a - b;}\n")
+		end
+		if use_multiply then
+			sb:write_string("float multiply(float a, float b) {return a * b;}\n")
+		end
+		if use_divide then
+			sb:write_string("float divide(float a, float b) {return a / b;}\n")
+		end
+		if use_print then
+			sb:write_string('void println(float a) {printf("%f\\n", (double)a);}\n')
+		end
         sb:write_string("int main() {\n")
         for i=0,<#node.u.Program.body do
             sb:write_string(codeGenerator_c(node.u.Program.body[i]))
         end
+        sb:write_string("\treturn 0;\n")
         sb:write_string("}\n")
     elseif node.type=='NumberLiteral' then
         sb:write_string(node.u.NumberLiteral.value)
@@ -314,7 +333,15 @@ local function codeGenerator_c(node: *ASTNode):string
         sb:write_string(codeGenerator_c(node.u.ExpressionStatement.expression))
         sb:write_string(";\n")
     elseif node.type=='Call' then
-        sb:write_string(node.u.Call.callee.name)
+        local name:string=node.u.Call.callee.name
+        if name=='+' then name = 'add' end
+        if name=='-' then name = 'subtract' end
+        if name=='*' then name = 'multiply' end
+        if name=='/' then name = 'divide' end
+        if name=='write'
+        or name=='print'
+        then name = 'println' end
+        sb:write_string(name)
         sb:write_string("(")
         for i=0,<#node.u.Call.arguments do
             if i>0 then
