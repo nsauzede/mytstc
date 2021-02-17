@@ -338,14 +338,14 @@ fn traverser(mut ast ASTNode) {
 }
 
 fn transformer(mut ast ASTNode) ASTNode {
-	unsafe {
-		mut newast := ASTNode{
-			program: {}
-		}
-		ast.u.ctxt = &newast
-		traverser(mut ast)
-		return newast
+	mut newast := ASTNode{
+		program: {}
 	}
+	unsafe {
+		ast.u.ctxt = &newast
+	}
+	traverser(mut ast)
+	return newast
 }
 
 fn (ctx Context) code_generator_c(node ASTNode) string {
