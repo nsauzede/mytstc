@@ -1,7 +1,7 @@
 module main
 
-import os
 import strings
+import os
 
 const (
 	print_input  = 0x01
@@ -26,10 +26,23 @@ mut:
 	use_print    bool
 }
 
-struct Token {
-	@type string
+struct Paren {
 	value string
 }
+
+struct Name {
+	value string
+}
+
+struct Number {
+	value string
+}
+
+struct String {
+	value string
+}
+
+type Token = Name | Number | Paren | String
 
 struct Callee {
 	@type string
@@ -69,14 +82,14 @@ mut:
 	@type  string   = 'CallExpression'
 	ctxt   &ASTNode = voidptr(0)
 	params []&ASTNode
-	name string
+	name   string
 }
 
 struct ExpressionStatement {
 mut:
-	@type string   = 'ExpressionStatement'
-	ctxt  &ASTNode = voidptr(0)
-	arr   []&ASTNode
+	@type      string   = 'ExpressionStatement'
+	ctxt       &ASTNode = voidptr(0)
+	arr        []&ASTNode
 	expression &ASTNode = voidptr(0)
 }
 
@@ -85,7 +98,7 @@ mut:
 	@type     string   = 'Call'
 	ctxt      &ASTNode = voidptr(0)
 	arguments []&ASTNode
-	callee Callee
+	callee    Callee
 }
 
 union ASTNode {
@@ -100,8 +113,11 @@ mut:
 }
 
 fn print_tokens(tokens []Token) {
-	for i := 0; i < tokens.len; i++ {
-		println('${tokens[i].@type}\t${tokens[i].value}')
+	for t in tokens {
+		print('$t.type_name()\t')
+		match t {
+			Paren, Name, Number, String { println('$t.value') }
+		}
 	}
 }
 
@@ -162,12 +178,12 @@ fn tokenizer(input string) []Token {
 	for current < input.len {
 		mut c := input[current]
 		if c == `(` {
-			tokens << Token{'paren', '('}
+			tokens << Paren{'('}
 			current++
 			continue
 		}
 		if c == `)` {
-			tokens << Token{'paren', ')'}
+			tokens << Paren{')'}
 			current++
 			continue
 		}
@@ -182,7 +198,7 @@ fn tokenizer(input string) []Token {
 				current++
 				c = input[current]
 			}
-			tokens << Token{'number', value.str()}
+			tokens << Number{value.str()}
 			continue
 		}
 		if is_letter(c) {
@@ -192,7 +208,7 @@ fn tokenizer(input string) []Token {
 				current++
 				c = input[current]
 			}
-			tokens << Token{'name', value.str()}
+			tokens << Name{value.str()}
 			continue
 		}
 		panic("I don't know what this character is: `${c:c}`")
@@ -200,66 +216,71 @@ fn tokenizer(input string) []Token {
 	return tokens
 }
 
-fn (mut ctx Context) walk(current int, tokens []Token) (int, &ASTNode) {
-	unsafe {
-		mut token := tokens[current]
-		if token.@type == 'number' {
-			return current + 1, &ASTNode{
-				numberliteral: {
-					value: token.value
-				}
+fn (mut ctx Context) walk(current0 int, tokens []Token) (int, &ASTNode) {
+	mut current := current0
+	token := &tokens[current]
+	if token is Number {
+		return current + 1, &ASTNode{
+			numberliteral: {
+				value: token.value
 			}
 		}
-		if token.@type == 'string' {
-			return current + 1, &ASTNode{
-				stringliteral: {
-					value: token.value
-				}
-			}
-		}
-		if token.@type == 'paren' && token.value == '(' {
-			current++
-			token = tokens[current]
-			mut node := &ASTNode{
-				callexpression: {
-					name: token.value
-				}
-			}
-			match token.value {
-				'+' { ctx.use_add = true }
-				'-' { ctx.use_subtract = true }
-				'*' { ctx.use_multiply = true }
-				'/' { ctx.use_divide = true }
-				'write', 'print' { ctx.use_print = true }
-				else {}
-			}
-			current++
-			token = tokens[current]
-			for token.@type != 'paren' || (token.@type == 'paren' && token.value != ')') {
-				mut child := &ASTNode{}
-				current, child = ctx.walk(current, tokens)
-				node.callexpression.params << child
-				token = tokens[current]
-			}
-			return current + 1, node
-		}
-		panic('walk: Type error: `${token.@type}` $token.value')
 	}
+	if token is String {
+		return current + 1, &ASTNode{
+			stringliteral: {
+				value: token.value
+			}
+		}
+	}
+	if token is Paren {
+		if token.value == '(' {
+			current++
+			token2 := &tokens[current]
+			if token2 is Name {
+				mut node := &ASTNode{
+					callexpression: {
+						name: token2.value
+					}
+				}
+				match token2.value {
+					'+' { ctx.use_add = true }
+					'-' { ctx.use_subtract = true }
+					'*' { ctx.use_multiply = true }
+					'/' { ctx.use_divide = true }
+					'write', 'print' { ctx.use_print = true }
+					else {}
+				}
+				current++
+				for {
+					token3 := &tokens[current]
+					if token3 is Paren {
+						if token3.value == ')' {
+							break
+						}
+					}
+					mut child := &ASTNode{}
+					current, child = ctx.walk(current, tokens)
+					unsafe { node.callexpression.params << child }
+				}
+				return current + 1, node
+			}
+		}
+	}
+	panic('walk: Type error: `$token.type_name()`')
 }
 
 fn (mut ctx Context) parser(tokens []Token) ASTNode {
-	unsafe {
-		mut ast := ASTNode{
-			program: {}
-		}
-		mut current := 0
-		for current < tokens.len {
-			mut node := &ASTNode{}
-			current, node = ctx.walk(current, tokens)
-			ast.program.body << node
-		}
-		return ast
+	mut ast := ASTNode{
+		program: {}
 	}
+	mut current := 0
+	for current < tokens.len {
+		mut node := &ASTNode{}
+		current, node = ctx.walk(current, tokens)
+		unsafe { ast.program.body << node }
+	}
+	return ast
 }
 
 fn traverse_node(mut node ASTNode, parent &ASTNode) {
@@ -594,6 +615,6 @@ fn main() {
 		source: '(write(+ (* (/ 9 5) 60) 32))'
 	}
 	ctx.set_args()
-	output:=ctx.compiler()
+	output := ctx.compiler()
 	println(output)
 }
