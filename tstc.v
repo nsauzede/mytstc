@@ -52,27 +52,27 @@ struct Callee {
 struct ASTNodeGeneric {
 mut:
 	@type string
-	ctxt  &ASTNode = voidptr(0)
+	ctx   &ASTNode = voidptr(0)
 	arr   []&ASTNode
 }
 
 struct Program {
 mut:
 	@type string   = 'Program'
-	ctxt  &ASTNode = voidptr(0)
+	ctx   &ASTNode = voidptr(0)
 	body  []&ASTNode
 }
 
 struct NumberLiteral {
 	@type string   = 'NumberLiteral'
-	ctxt  &ASTNode = voidptr(0)
+	ctx   &ASTNode = voidptr(0)
 	arr   []&ASTNode
 	value string
 }
 
 struct StringLiteral {
 	@type string   = 'StringLiteral'
-	ctxt  &ASTNode = voidptr(0)
+	ctx   &ASTNode = voidptr(0)
 	arr   []&ASTNode
 	value string
 }
@@ -80,7 +80,7 @@ struct StringLiteral {
 struct CallExpression {
 mut:
 	@type  string   = 'CallExpression'
-	ctxt   &ASTNode = voidptr(0)
+	ctx    &ASTNode = voidptr(0)
 	params []&ASTNode
 	name   string
 }
@@ -88,7 +88,7 @@ mut:
 struct ExpressionStatement {
 mut:
 	@type      string   = 'ExpressionStatement'
-	ctxt       &ASTNode = voidptr(0)
+	ctx        &ASTNode = voidptr(0)
 	arr        []&ASTNode
 	expression &ASTNode = voidptr(0)
 }
@@ -96,7 +96,7 @@ mut:
 struct Call {
 mut:
 	@type     string   = 'Call'
-	ctxt      &ASTNode = voidptr(0)
+	ctx       &ASTNode = voidptr(0)
 	arguments []&ASTNode
 	callee    Callee
 }
@@ -285,10 +285,11 @@ fn (mut ctx Context) parser(tokens []Token) ASTNode {
 
 fn traverse_node(mut node ASTNode, parent &ASTNode) {
 	unsafe {
+		println('traverse_node.. node=${voidptr(node)}')
 		if node.u.@type == 'NumberLiteral' {
 			if parent != voidptr(0) {
-				if parent.u.ctxt != voidptr(0) {
-					parent.u.ctxt.u.arr << &ASTNode{
+				if parent.u.ctx != voidptr(0) {
+					parent.u.ctx.u.arr << &ASTNode{
 						numberliteral: {
 							value: node.numberliteral.value
 						}
@@ -305,23 +306,37 @@ fn traverse_node(mut node ASTNode, parent &ASTNode) {
 					}
 				}
 			}
-			node.u.ctxt = expression
+			node.u.ctx = expression
 			if parent.u.@type != 'CallExpression' {
 				expression2 := &ASTNode{
 					expressionstatement: {
 						expression: expression
 					}
 				}
-				parent.u.ctxt.u.arr << expression2
+				parent.u.ctx.u.arr << expression2
 			} else {
-				parent.u.ctxt.u.arr << expression
+				parent.u.ctx.u.arr << expression
 			}
 		}
 		if node.u.@type == 'Program' {
+			println(' traverse Prog ctx=${voidptr(node.u.ctx)} $node.program.body.len')
 			for e in node.program.body {
+				if e.u.@type == 'Program' {
+					println('prog ctx=${voidptr(e.u.ctx)}')
+				}
+				if e.u.@type == 'CallExpression' {
+					println('callex ctx=${voidptr(e.u.ctx)}')
+				}
 				traverse_node(mut e, node)
+				if e.u.@type == 'Program' {
+					println('prog ctx=${voidptr(e.u.ctx)}')
+				}
+				if e.u.@type == 'CallExpression' {
+					println('callex ctx=${voidptr(e.u.ctx)}')
+				}
 			}
 		} else if node.u.@type == 'CallExpression' {
+			println(' traverse Callex')
 			for e in node.callexpression.params {
 				traverse_node(mut e, node)
 			}
@@ -342,7 +357,7 @@ fn transformer(mut ast ASTNode) ASTNode {
 		program: {}
 	}
 	unsafe {
-		ast.u.ctxt = &newast
+		ast.u.ctx = &newast
 	}
 	traverser(mut ast)
 	return newast

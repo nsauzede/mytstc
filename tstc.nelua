@@ -120,8 +120,7 @@ local function tokenizer(input: string): vector(Token)
                 current=current+1
                 c=input.data[current]
             end
-            local value:stringview=sb
-            tokens:push(Token{'number',value})
+            tokens:push(Token{'number',sb:promote()})
             continue
         end
         if is_letter(c) then
@@ -131,8 +130,7 @@ local function tokenizer(input: string): vector(Token)
                 current=current+1
                 c=input.data[current]
             end
-            local value:stringview=sb
-            tokens:push(Token{'name',value})
+            tokens:push(Token{'name',sb:promote()})
             continue
         end
         error(string.format("I don't know what this character is: `%c`", c))
@@ -353,8 +351,7 @@ local function codeGenerator_c(node: *ASTNode):string
     else
         error(string.format("Code gen Type error: `%s`", node.type))
     end
-    local output:stringview=sb
-    return output
+    return sb:promote()
 end
 
 local function codeGenerator_nelua(node: *ASTNode):string
@@ -401,8 +398,7 @@ local function codeGenerator_nelua(node: *ASTNode):string
     else
         error(string.format("Code gen Type error: `%s`", node.type))
     end
-    local output:stringview=sb
-    return output
+    return sb:promote()
 end
 
 local function codeGenerator_v(node: *ASTNode):string
@@ -452,8 +448,7 @@ local function codeGenerator_v(node: *ASTNode):string
     else
         error(string.format("Code gen Type error: `%s`", node.type))
     end
-    local output:stringview=sb
-    return output
+    return sb:promote()
 end
 
 local Flags = @enum {
