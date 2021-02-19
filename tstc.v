@@ -86,64 +86,64 @@ struct Identifier {
 type ASTNode = Call | CallExpression | ExpressionStatement | Identifier | NumberLiteral |
 	Program | StringLiteral
 
-fn print_tokens(tokens []Token) {
+fn eprint_tokens(tokens []Token) {
 	for t in tokens {
-		print('$t.type_name()\t')
+		eprint('$t.type_name()\t')
 		match t {
-			Paren, Name, Number, String { println('$t.value') }
+			Paren, Name, Number, String { eprintln('$t.value') }
 		}
 	}
 }
 
-fn print_ast_r(node ASTNode, nest int) {
+fn eprint_ast_r(node ASTNode, nest int) {
 	for i := 0; i < nest; i++ {
-		print('\t')
+		eprint('\t')
 	}
 	match node {
 		Program {
-			print('${typeof(node).name}')
-			println(' body:$node.body.len=\\')
+			eprint('${typeof(node).name}')
+			eprintln(' body:$node.body.len=\\')
 			for e in node.body {
-				print_ast_r(e, nest + 1)
+				eprint_ast_r(e, nest + 1)
 			}
 		}
 		NumberLiteral {
-			print('${typeof(node).name}')
-			println(' value=$node.value')
+			eprint('${typeof(node).name}')
+			eprintln(' value=$node.value')
 		}
 		StringLiteral {
-			print('${typeof(node).name}')
-			println(' value=$node.value')
+			eprint('${typeof(node).name}')
+			eprintln(' value=$node.value')
 		}
 		Call {
-			print('${typeof(node).name}')
-			println(' name=$node.name params=\\')
+			eprint('${typeof(node).name}')
+			eprintln(' name=$node.name params=\\')
 			for e in node.params {
-				print_ast_r(e, nest + 1)
+				eprint_ast_r(e, nest + 1)
 			}
 		}
 		ExpressionStatement {
-			print('${typeof(node).name}')
-			print_ast_r(node.expression, nest + 1)
+			eprint('${typeof(node).name}')
+			eprint_ast_r(node.expression, nest + 1)
 		}
 		CallExpression {
-			print('${typeof(node).name}')
-			print(' callee=')
-			print_ast_r(node.callee, 0)
-			println(' arguments:$node.arguments.len=\\')
+			eprint('${typeof(node).name}')
+			eprint(' callee=')
+			eprint_ast_r(node.callee, 0)
+			eprintln(' arguments:$node.arguments.len=\\')
 			for e in node.arguments {
-				print_ast_r(e, nest + 1)
+				eprint_ast_r(e, nest + 1)
 			}
 		}
 		Identifier {
-			print('${typeof(node).name}')
-			print(' name=$node.name')
+			eprint('${typeof(node).name}')
+			eprint(' name=$node.name')
 		}
 	}
 }
 
-fn print_ast(ast ASTNode) {
-	print_ast_r(ast, 0)
+fn eprint_ast(ast ASTNode) {
+	eprint_ast_r(ast, 0)
 }
 
 fn is_space(c byte) bool {
@@ -162,10 +162,9 @@ fn is_alnum(c byte) bool {
 	return is_letter(c) || is_number(c)
 }
 
-fn tokenizer(input string) []Token {
+fn (ctx Context) tokenizer(input string) []Token {
 	mut current := 0
 	mut tokens := []Token{}
-	// println('input:$input.len')
 	for current < input.len {
 		// println('current=$current')
 		mut c := input[current]
@@ -196,13 +195,14 @@ fn tokenizer(input string) []Token {
 			// println('quote')
 			mut value := strings.new_builder(256)
 			mut started := false
+			mut nested_paren := 0
 			for {
 				current++
 				if current >= input.len {
 					break
 				}
 				c = input[current]
-				if is_space(c) {
+				if 0 == nested_paren && is_space(c) {
 					if started {
 						break
 					} else {
@@ -210,7 +210,19 @@ fn tokenizer(input string) []Token {
 					}
 				}
 				started = true
+				if c == `(` {
+					nested_paren++
+				}
 				value.write_b(c)
+				if nested_paren > 0 {
+					if c == `)` {
+						nested_paren--
+						if nested_paren == 0 {
+							current++
+							break
+						}
+					}
+				}
 			}
 			tokens << String{value.str()}
 		} else if c == `"` {
@@ -657,7 +669,11 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 			sb.write('f32($node.value)')
 		}
 		StringLiteral {
-			sb.write("'$node.value'")
+			mut delim := "'"
+			if node.value.contains("'") && !node.value.contains('"') {
+				delim = '"'
+			}
+			sb.write('$delim$node.value$delim')
 		}
 		ExpressionStatement {
 			sb.write(ctx.code_generator_v(node.expression))
@@ -700,21 +716,21 @@ fn (mut ctx Context) compiler() {
 		ctx.source = os.read_file(ctx.input_file) or { panic("can't read $ctx.input_file") }
 	}
 	if 0 != ctx.flags & print_input {
-		println('input=\\\n$ctx.source')
+		eprintln('input=\\\n$ctx.source')
 	}
-	tokens := tokenizer(ctx.source)
+	tokens := ctx.tokenizer(ctx.source)
 	if 0 != flags & print_tokens {
-		println('tokens=\\\n')
-		print_tokens(tokens)
+		eprintln('tokens=\\\n')
+		eprint_tokens(tokens)
 	}
 	mut ast := ctx.parser(tokens)
 	if 0 != flags & print_ast {
-		print_ast(ast)
+		eprint_ast(ast)
 	}
 	mut newast := ASTNode{}
 	ast, newast = transformer(mut &ast)
 	if 0 != flags & print_newast {
-		print_ast(newast)
+		eprint_ast(newast)
 	}
 	mut output := ''
 	if 0 != flags & output_c {
