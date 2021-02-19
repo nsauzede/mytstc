@@ -19,11 +19,15 @@ struct Context {
 mut:
 	flags        int
 	source       string
+	input_file   string
+	output_file  string
+	use_obj      bool = true
 	use_add      bool
 	use_subtract bool
 	use_multiply bool
 	use_divide   bool
 	use_print    bool
+	use_list     bool
 }
 
 struct Paren {
@@ -103,7 +107,11 @@ fn print_ast_r(node ASTNode, nest int) {
 				print_ast_r(e, nest + 1)
 			}
 		}
-		NumberLiteral, StringLiteral {
+		NumberLiteral {
+			print('${typeof(node).name}')
+			println(' value=$node.value')
+		}
+		StringLiteral {
 			print('${typeof(node).name}')
 			println(' value=$node.value')
 		}
@@ -150,33 +158,89 @@ fn is_letter(c byte) bool {
 	return (c >= `a` && c <= `z`) || c == `+` || c == `-` || c == `*` || c == `/`
 }
 
+fn is_alnum(c byte) bool {
+	return is_letter(c) || is_number(c)
+}
+
 fn tokenizer(input string) []Token {
 	mut current := 0
 	mut tokens := []Token{}
+	// println('input:$input.len')
 	for current < input.len {
+		// println('current=$current')
 		mut c := input[current]
+		// println('got c=$c (${c:c})')
 		if c == `(` {
-			tokens << Paren{'('}
+			// println('paren(')
 			current++
+			tokens << Paren{'('}
 		} else if c == `)` {
+			// println('paren)')
 			tokens << Paren{')'}
 			current++
 		} else if is_space(c) {
 			current++
 		} else if is_number(c) {
+			// println('number')
 			mut value := strings.new_builder(256)
 			for is_number(c) {
 				value.write_b(c)
 				current++
+				if current >= input.len {
+					break
+				}
 				c = input[current]
 			}
 			tokens << Number{value.str()}
-		} else if is_letter(c) {
+		} else if c == `\'` {
+			// println('quote')
 			mut value := strings.new_builder(256)
-			for is_letter(c) {
+			mut started := false
+			for {
+				current++
+				if current >= input.len {
+					break
+				}
+				c = input[current]
+				if is_space(c) {
+					if started {
+						break
+					} else {
+						continue
+					}
+				}
+				started = true
+				value.write_b(c)
+			}
+			tokens << String{value.str()}
+		} else if c == `"` {
+			// println('doublequote')
+			mut value := strings.new_builder(256)
+			for {
+				current++
+				if current >= input.len {
+					break
+				}
+				c = input[current]
+				if c == `"` {
+					current++
+					break
+				}
+				value.write_b(c)
+			}
+			tokens << String{value.str()}
+		} else if is_alnum(c) {
+			// println('alnum')
+			mut value := strings.new_builder(256)
+			for is_alnum(c) {
 				value.write_b(c)
 				current++
+				if current >= input.len {
+					break
+				}
+				// println('current=$current')
 				c = input[current]
+				// println('got c=$c (${c:c})')
 			}
 			tokens << Name{value.str()}
 		} else {
@@ -201,6 +265,13 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 			current_.value++
 			return n
 		}
+		String {
+			n := &StringLiteral{
+				value: token0.value
+			}
+			current_.value++
+			return n
+		}
 		Paren {
 			if token0.value == '(' {
 				mut current := current_
@@ -215,6 +286,7 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 					'*' { ctx.use_multiply = true }
 					'/' { ctx.use_divide = true }
 					'write', 'print' { ctx.use_print = true }
+					'list' { ctx.use_list = true }
 					else {}
 				}
 				current.value++
@@ -262,6 +334,11 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 		match mut node {
 			NumberLiteral {
 				child = NumberLiteral{
+					value: node.value
+				}
+			}
+			StringLiteral {
+				child = StringLiteral{
 					value: node.value
 				}
 			}
@@ -323,7 +400,7 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 				e = traverse_node(e, &node)
 			}
 		}
-		NumberLiteral {}
+		NumberLiteral, StringLiteral {}
 		else {
 			panic('node is unknown ? ${typeof(node).name}')
 		}
@@ -342,25 +419,43 @@ fn transformer(mut ast ASTNode) (ASTNode, ASTNode) {
 
 fn (ctx Context) code_generator_c(node ASTNode) string {
 	mut sb := strings.new_builder(1024)
+	use_obj := true // this is because C doesn't handle sum types natively
 	match node {
 		Program {
 			if ctx.use_print {
 				sb.writeln('#include <stdio.h>')
 			}
+			if use_obj {
+				sb.writeln('typedef enum{obj_f,obj_i,obj_s} obj_t;')
+				sb.writeln('typedef struct{obj_t t;union{float f;int i;char *s;};} obj;')
+				sb.writeln('#define F(v)(obj){obj_f,.f=v}')
+				sb.writeln('#define S(v)(obj){obj_s,.s=v}')
+			}
 			if ctx.use_add {
-				sb.writeln('float add(float a, float b) {return a + b;}')
+				sb.writeln('obj add(obj a,obj b){obj r=F(0);r.f=a.f+b.f;return r;}')
 			}
 			if ctx.use_subtract {
-				sb.writeln('float subtract(float a, float b) {return a - b;}')
+				sb.writeln('
+				obj subtract(obj a, obj b) {obj r=F(0);r.f=a.f-b.f;return r;}')
 			}
 			if ctx.use_multiply {
-				sb.writeln('float multiply(float a, float b) {return a * b;}')
+				sb.writeln('obj multiply(obj a, obj b) {obj r=F(0);r.f=a.f*b.f;return r;}')
 			}
 			if ctx.use_divide {
-				sb.writeln('float divide(float a, float b) {return a / b;}')
+				sb.writeln('obj divide(obj a, obj b) {obj r=F(0);r.f=a.f/b.f;return r;}')
 			}
 			if ctx.use_print {
-				sb.writeln('void println(float a) {printf("%f\\n", (double)a);}')
+				sb.writeln('void println(obj a){
+	if (a.t == obj_f){
+		printf("%f\\n", (double)a.f);
+	}
+	else if (a.t == obj_s){
+		printf("%s\\n", a.s);
+	}
+	else{
+		printf("unknown obj type %d\\n", a.t);
+	}
+}')
 			}
 			sb.writeln('int main() {')
 			for e in node.body {
@@ -370,7 +465,10 @@ fn (ctx Context) code_generator_c(node ASTNode) string {
 			sb.writeln('}')
 		}
 		NumberLiteral {
-			sb.write(node.value)
+			sb.write('F($node.value)')
+		}
+		StringLiteral {
+			sb.write('S("$node.value")')
 		}
 		ExpressionStatement {
 			sb.write('\t')
@@ -431,6 +529,9 @@ fn (ctx Context) code_generator_nelua(node ASTNode) string {
 		NumberLiteral {
 			sb.write(node.value)
 		}
+		StringLiteral {
+			sb.write('"$node.value"')
+		}
 		ExpressionStatement {
 			sb.write(ctx.code_generator_nelua(node.expression))
 			sb.writeln('')
@@ -470,24 +571,93 @@ fn (ctx Context) code_generator_v(node ASTNode) string {
 	mut sb := strings.new_builder(1024)
 	match node {
 		Program {
+			if ctx.use_obj {
+				sb.writeln('type Obj=u64|f32|int|string')
+			}
 			if ctx.use_add {
-				sb.writeln('fn add(a f32, b f32) f32 {return a + b}')
+				sb.writeln("
+fn add(a...Obj)Obj{mut r:= Obj{}
+	for i, e in a {
+		if i == 0 {
+			r = e
+			continue
+		}match mut r{
+			f32{match mut e{
+				f32{r=r+e}
+				else{panic('loop f32 \$e.type_name()')}}}
+			int{match mut e{
+				int{r=r+e}
+				else{panic('loop int \$e.type_name()')}}}
+			else{panic('loop unknown type \$r.type_name()')}}}
+	return r}
+")
 			}
 			if ctx.use_subtract {
-				sb.writeln('fn subtract(a f32, b f32) f32 {return a - b}')
+				sb.writeln("
+fn subtract(a...Obj)Obj{mut r:=Obj{}
+	for i, e in a {
+		if i == 0 {
+			r = e
+			continue
+		}match mut r{
+			f32{match mut e{
+				f32{r=r-e}
+				else{panic('loop f32 \$e.type_name()')}}}
+			int{match mut e{
+				int{r=r-e}
+				else{panic('loop int \$e.type_name()')}}}
+			else{panic('loop unknown type \$r.type_name()')}}}
+	return r}
+")
 			}
 			if ctx.use_multiply {
-				sb.writeln('fn multiply(a f32, b f32) f32 {return a * b}')
+				sb.writeln("
+fn multiply(a...Obj)Obj{mut r:=Obj{}
+	for i, e in a {
+		if i == 0 {
+			r = e
+			continue
+		}match mut r{
+			f32{match mut e{
+				f32{r=r*e}
+				else{panic('loop f32 \$e.type_name()')}}}
+			int{match mut e{
+				int{r=r*e}
+				else{panic('loop int \$e.type_name()')}}}
+			else{panic('loop unknown type \$r.type_name()')}}}
+	return r}
+")
 			}
 			if ctx.use_divide {
-				sb.writeln('fn divide(a f32, b f32) f32 {return a / b}')
+				sb.writeln("
+fn divide(a...Obj)Obj{mut r:=Obj{}
+	for i, e in a {
+		if i == 0 {
+			r = e
+			continue
+		}match mut r{
+			f32{match mut e{
+				f32{r=r/e}
+				else{panic('loop f32 \$e.type_name()')}}}
+			int{match mut e{
+				int{r=r/e}
+				else{panic('loop int \$e.type_name()')}}}
+			else{panic('loop unknown type \$r.type_name()')}}}
+	return r}
+")
+			}
+			if ctx.use_list {
+				sb.writeln('fn list(a...Obj)[]Obj{mut r:=[]Obj{}for e in a{r<<e}return r}')
 			}
 			for e in node.body {
 				sb.write(ctx.code_generator_v(e))
 			}
 		}
 		NumberLiteral {
-			sb.write(node.value)
+			sb.write('f32($node.value)')
+		}
+		StringLiteral {
+			sb.write("'$node.value'")
 		}
 		ExpressionStatement {
 			sb.write(ctx.code_generator_v(node.expression))
@@ -524,13 +694,17 @@ fn (ctx Context) code_generator_v(node ASTNode) string {
 	return output
 }
 
-fn (mut ctx Context) compiler() string {
+fn (mut ctx Context) compiler() {
 	flags := ctx.flags
+	if '' != ctx.input_file {
+		ctx.source = os.read_file(ctx.input_file) or { panic("can't read $ctx.input_file") }
+	}
 	if 0 != ctx.flags & print_input {
 		println('input=\\\n$ctx.source')
 	}
 	tokens := tokenizer(ctx.source)
 	if 0 != flags & print_tokens {
+		println('tokens=\\\n')
 		print_tokens(tokens)
 	}
 	mut ast := ctx.parser(tokens)
@@ -553,9 +727,16 @@ fn (mut ctx Context) compiler() string {
 		output = ctx.code_generator_v(newast)
 	}
 	if 0 != ctx.flags & print_output {
-		println('output=\\\n$output')
+		// println('output=\\\n$output')
+		println('$output')
 	}
-	return output
+	if '' != ctx.output_file {
+		mut fout := os.create(ctx.output_file) or { os.File{
+			cfile: 0
+		} }
+		fout.write_string(output) or { }
+		fout.close()
+	}
 }
 
 fn usage() {
@@ -565,6 +746,7 @@ fn usage() {
 	println('Options:')
 	println('   --help\t\tDisplay this information.')
 	println('   -x "CODE"\t\tUse provided CODE as source input.')
+	println('   -o <file>"\t\tPlace the output into <file>.')
 	println('   --print-input\tDisplay the source input.')
 	println('   --print-tokens\tDisplay the tokens.')
 	println('   --print-ast\t\tDisplay the ast.')
@@ -580,44 +762,48 @@ fn usage() {
 
 fn (mut ctx Context) set_args() {
 	mut set_input := false
-	for a in os.args {
+	mut set_output_file := false
+	for a in os.args[1..] {
 		if set_input {
 			set_input = false
 			ctx.source = a
-			continue
-		}
-		if a == '--help' {
+			println('Just read input="$ctx.source"')
+		} else if set_output_file {
+			set_output_file = false
+			ctx.output_file = a
+		} else if a == '--help' {
 			usage()
 			exit(0)
-		}
-		if a == '-x' {
+		} else if a == '-x' {
 			set_input = true
-			continue
-		}
-		if a == '--print-input' {
+		} else if a == '-o' {
+			set_output_file = true
+		} else if a == '--print-input' {
 			ctx.flags |= print_input
-		}
-		if a == '--print-tokens' {
+		} else if a == '--print-tokens' {
 			ctx.flags |= print_tokens
-		}
-		if a == '--print-ast' {
+		} else if a == '--print-ast' {
 			ctx.flags |= print_ast
-		}
-		if a == '--print-newast' {
+		} else if a == '--print-newast' {
 			ctx.flags |= print_newast
-		}
-		if a == '--print-output' {
+		} else if a == '--print-output' {
 			ctx.flags |= print_output
-		}
-		if a == '--output-c' {
+		} else if a == '--output-c' {
 			ctx.flags = (ctx.flags & ~output_mask) | output_c
-		}
-		if a == '--output-nelua' {
+		} else if a == '--output-nelua' {
 			ctx.flags = (ctx.flags & ~output_mask) | output_nelua
-		}
-		if a == '--output-v' {
+		} else if a == '--output-v' {
 			ctx.flags = (ctx.flags & ~output_mask) | output_v
+		} else {
+			// println('a="$a" input_file="$ctx.input_file"')
+			if '' != ctx.input_file {
+				panic('Input file set more than one time')
+			}
+			ctx.input_file = a
 		}
+	}
+	if '' == ctx.output_file {
+		ctx.flags |= print_output
 	}
 }
 
@@ -627,6 +813,5 @@ fn main() {
 		source: '(write(+ (* (/ 9 5) 60) 32))'
 	}
 	ctx.set_args()
-	output := ctx.compiler()
-	println(output)
+	ctx.compiler()
 }
