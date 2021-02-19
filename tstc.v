@@ -44,73 +44,43 @@ struct String {
 
 type Token = Name | Number | Paren | String
 
-struct Callee {
-	@type string
-	name  string
-}
-
-struct ASTNodeGeneric {
-mut:
-	@type string
-	ctx   &ASTNode = voidptr(0)
-	arr   []&ASTNode
-}
-
 struct Program {
 mut:
-	@type string   = 'Program'
-	ctx   &ASTNode = voidptr(0)
-	body  []&ASTNode
-}
-
-struct NumberLiteral {
-	@type string   = 'NumberLiteral'
-	ctx   &ASTNode = voidptr(0)
-	arr   []&ASTNode
-	value string
-}
-
-struct StringLiteral {
-	@type string   = 'StringLiteral'
-	ctx   &ASTNode = voidptr(0)
-	arr   []&ASTNode
-	value string
-}
-
-struct CallExpression {
-mut:
-	@type  string   = 'CallExpression'
-	ctx    &ASTNode = voidptr(0)
-	params []&ASTNode
-	name   string
-}
-
-struct ExpressionStatement {
-mut:
-	@type      string   = 'ExpressionStatement'
-	ctx        &ASTNode = voidptr(0)
-	arr        []&ASTNode
-	expression &ASTNode = voidptr(0)
+	ctx  &ASTNode = voidptr(0)
+	body []ASTNode
 }
 
 struct Call {
 mut:
-	@type     string   = 'Call'
-	ctx       &ASTNode = voidptr(0)
-	arguments []&ASTNode
-	callee    Callee
+	ctx    &ASTNode = voidptr(0)
+	name   string
+	params []ASTNode
 }
 
-union ASTNode {
-mut:
-	u                   ASTNodeGeneric
-	program             Program
-	numberliteral       NumberLiteral
-	stringliteral       StringLiteral
-	callexpression      CallExpression
-	expressionstatement ExpressionStatement
-	call                Call
+struct NumberLiteral {
+	value string
 }
+
+struct StringLiteral {
+	value string
+}
+
+struct ExpressionStatement {
+	expression ASTNode
+}
+
+struct CallExpression {
+mut:
+	callee    ASTNode
+	arguments []ASTNode
+}
+
+struct Identifier {
+	name string
+}
+
+type ASTNode = Call | CallExpression | ExpressionStatement | Identifier | NumberLiteral |
+	Program | StringLiteral
 
 fn print_tokens(tokens []Token) {
 	for t in tokens {
@@ -122,36 +92,44 @@ fn print_tokens(tokens []Token) {
 }
 
 fn print_ast_r(node ASTNode, nest int) {
-	unsafe {
-		for i := 0; i < nest; i++ {
-			print('\t')
-		}
-		print('${node.u.@type}')
-		if node.u.@type == 'Program' {
-			println(' body=\\')
-			for e in node.program.body {
+	for i := 0; i < nest; i++ {
+		print('\t')
+	}
+	match node {
+		Program {
+			print('${typeof(node).name}')
+			println(' body:$node.body.len=\\')
+			for e in node.body {
 				print_ast_r(e, nest + 1)
 			}
 		}
-		if node.u.@type == 'NumberLiteral' || node.u.@type == 'StringLiteral' {
-			println(' value=$node.numberliteral.value')
+		NumberLiteral, StringLiteral {
+			print('${typeof(node).name}')
+			println(' value=$node.value')
 		}
-		if node.u.@type == 'CallExpression' {
-			println(' name=$node.callexpression.name params=\\')
-			for e in node.callexpression.params {
+		Call {
+			print('${typeof(node).name}')
+			println(' name=$node.name params=\\')
+			for e in node.params {
 				print_ast_r(e, nest + 1)
 			}
 		}
-		if node.u.@type == 'ExpressionStatement' {
-			print_ast_r(node.expressionstatement.expression, nest + 1)
+		ExpressionStatement {
+			print('${typeof(node).name}')
+			print_ast_r(node.expression, nest + 1)
 		}
-		if node.u.@type == 'Call' {
-			print(' callee type=${node.call.callee.@type}')
-			print(' name=$node.call.callee.name')
-			println(' arguments=\\')
-			for e in node.call.arguments {
+		CallExpression {
+			print('${typeof(node).name}')
+			print(' callee=')
+			print_ast_r(node.callee, 0)
+			println(' arguments:$node.arguments.len=\\')
+			for e in node.arguments {
 				print_ast_r(e, nest + 1)
 			}
+		}
+		Identifier {
+			print('${typeof(node).name}')
+			print(' name=$node.name')
 		}
 	}
 }
@@ -180,18 +158,12 @@ fn tokenizer(input string) []Token {
 		if c == `(` {
 			tokens << Paren{'('}
 			current++
-			continue
-		}
-		if c == `)` {
+		} else if c == `)` {
 			tokens << Paren{')'}
 			current++
-			continue
-		}
-		if is_space(c) {
+		} else if is_space(c) {
 			current++
-			continue
-		}
-		if is_number(c) {
+		} else if is_number(c) {
 			mut value := strings.new_builder(256)
 			for is_number(c) {
 				value.write_b(c)
@@ -199,9 +171,7 @@ fn tokenizer(input string) []Token {
 				c = input[current]
 			}
 			tokens << Number{value.str()}
-			continue
-		}
-		if is_letter(c) {
+		} else if is_letter(c) {
 			mut value := strings.new_builder(256)
 			for is_letter(c) {
 				value.write_b(c)
@@ -209,41 +179,37 @@ fn tokenizer(input string) []Token {
 				c = input[current]
 			}
 			tokens << Name{value.str()}
-			continue
+		} else {
+			panic("I don't know what this character is: `${c:c}`")
 		}
-		panic("I don't know what this character is: `${c:c}`")
 	}
 	return tokens
 }
 
-fn (mut ctx Context) walk(current0 int, tokens []Token) (int, &ASTNode) {
-	mut current := current0
-	token := &tokens[current]
-	if token is Number {
-		return current + 1, &ASTNode{
-			numberliteral: {
-				value: token.value
+struct MyInt {
+mut:
+	value int
+}
+
+fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
+	token0 := tokens[current_.value]
+	match token0 {
+		Number {
+			n := &NumberLiteral{
+				value: token0.value
 			}
+			current_.value++
+			return n
 		}
-	}
-	if token is String {
-		return current + 1, &ASTNode{
-			stringliteral: {
-				value: token.value
-			}
-		}
-	}
-	if token is Paren {
-		if token.value == '(' {
-			current++
-			token2 := &tokens[current]
-			if token2 is Name {
-				mut node := &ASTNode{
-					callexpression: {
-						name: token2.value
-					}
+		Paren {
+			if token0.value == '(' {
+				mut current := current_
+				current.value++
+				name := tokens[current.value] as Name
+				mut node := &Call{
+					name: name.value
 				}
-				match token2.value {
+				match name.value {
 					'+' { ctx.use_add = true }
 					'-' { ctx.use_subtract = true }
 					'*' { ctx.use_multiply = true }
@@ -251,122 +217,133 @@ fn (mut ctx Context) walk(current0 int, tokens []Token) (int, &ASTNode) {
 					'write', 'print' { ctx.use_print = true }
 					else {}
 				}
-				current++
+				current.value++
 				for {
-					token3 := &tokens[current]
-					if token3 is Paren {
-						if token3.value == ')' {
-							break
+					token := tokens[current.value]
+					match token {
+						Paren {
+							if token.value == ')' {
+								break
+							}
 						}
+						else {}
 					}
 					mut child := &ASTNode{}
-					current, child = ctx.walk(current, tokens)
-					unsafe { node.callexpression.params << child }
+					child = ctx.walk(mut &current, tokens)
+					node.params << child
 				}
-				return current + 1, node
+				current_.value = current.value + 1
+				return node
+			} else {
+				panic('Paren not (')
 			}
 		}
+		else {
+			panic('walk: Token type error: $token0')
+		}
 	}
-	panic('walk: Type error: `$token.type_name()`')
+	panic('walk: Type error !')
 }
 
 fn (mut ctx Context) parser(tokens []Token) ASTNode {
-	mut ast := ASTNode{
-		program: {}
-	}
-	mut current := 0
-	for current < tokens.len {
+	mut ast := Program{}
+	mut current := MyInt{}
+	for current.value < tokens.len {
 		mut node := &ASTNode{}
-		current, node = ctx.walk(current, tokens)
-		unsafe { ast.program.body << node }
+		node = ctx.walk(mut &current, tokens)
+		ast.body << node
 	}
 	return ast
 }
 
-fn traverse_node(mut node ASTNode, parent &ASTNode) {
-	unsafe {
-		println('traverse_node.. node=${voidptr(node)}')
-		if node.u.@type == 'NumberLiteral' {
-			if parent != voidptr(0) {
-				if parent.u.ctx != voidptr(0) {
-					parent.u.ctx.u.arr << &ASTNode{
-						numberliteral: {
-							value: node.numberliteral.value
-						}
-					}
+fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
+	if parent != voidptr(0) {
+		mut child := ASTNode{}
+		match mut node {
+			NumberLiteral {
+				child = NumberLiteral{
+					value: node.value
 				}
 			}
-		}
-		if node.u.@type == 'CallExpression' {
-			mut expression := &ASTNode{
-				call: {
-					callee: {
-						@type: 'Identifier'
-						name: node.callexpression.name
+			Call {
+				mut expression := &CallExpression{
+					callee: Identifier{
+						name: node.name
 					}
 				}
-			}
-			node.u.ctx = expression
-			if parent.u.@type != 'CallExpression' {
-				expression2 := &ASTNode{
-					expressionstatement: {
+				node.ctx = expression
+				if parent is Call {
+					child = expression
+				} else {
+					child = ExpressionStatement{
 						expression: expression
 					}
 				}
-				parent.u.ctx.u.arr << expression2
-			} else {
-				parent.u.ctx.u.arr << expression
+			}
+			else {
+				panic('child node is unknown ? $node.type_name()')
 			}
 		}
-		if node.u.@type == 'Program' {
-			println(' traverse Prog ctx=${voidptr(node.u.ctx)} $node.program.body.len')
-			for e in node.program.body {
-				if e.u.@type == 'Program' {
-					println('prog ctx=${voidptr(e.u.ctx)}')
-				}
-				if e.u.@type == 'CallExpression' {
-					println('callex ctx=${voidptr(e.u.ctx)}')
-				}
-				traverse_node(mut e, node)
-				if e.u.@type == 'Program' {
-					println('prog ctx=${voidptr(e.u.ctx)}')
-				}
-				if e.u.@type == 'CallExpression' {
-					println('callex ctx=${voidptr(e.u.ctx)}')
-				}
+		mut ctx := &ASTNode{}
+		match mut parent {
+			Program, Call {
+				ctx = parent.ctx
 			}
-		} else if node.u.@type == 'CallExpression' {
-			println(' traverse Callex')
-			for e in node.callexpression.params {
-				traverse_node(mut e, node)
+			else {
+				panic('parent is unknown ? ${typeof(parent).name}')
 			}
-		} else if node.u.@type == 'NumberLiteral' || node.u.@type == 'StringLiteral' {
-			// nothing special
-		} else {
-			panic('Type error: `${node.u.@type}`')
+		}
+		match mut ctx {
+			Program {
+				ctx.body << child
+			}
+			CallExpression {
+				ctx.arguments << child
+			}
+			else {
+				panic('unknown program parent ctx $ctx.type_name()')
+			}
+		}
+	} else {
+		match node {
+			Program {}
+			else {
+				panic('null parent for node ${typeof(node).name}')
+			}
 		}
 	}
+	match mut node {
+		Program {
+			for mut e in node.body {
+				e = traverse_node(e, &node)
+			}
+		}
+		Call {
+			for mut e in node.params {
+				e = traverse_node(e, &node)
+			}
+		}
+		NumberLiteral {}
+		else {
+			panic('node is unknown ? ${typeof(node).name}')
+		}
+	}
+	return node
 }
 
-fn traverser(mut ast ASTNode) {
-	traverse_node(mut ast, voidptr(0))
-}
-
-fn transformer(mut ast ASTNode) ASTNode {
-	mut newast := ASTNode{
-		program: {}
+fn transformer(mut ast ASTNode) (ASTNode, ASTNode) {
+	mut newast := &ASTNode(Program{})
+	if mut ast is Program {
+		ast.ctx = voidptr(newast)
 	}
-	unsafe {
-		ast.u.ctx = &newast
-	}
-	traverser(mut ast)
-	return newast
+	ast = traverse_node(ast, voidptr(0))
+	return *ast, *newast
 }
 
 fn (ctx Context) code_generator_c(node ASTNode) string {
-	unsafe {
-		mut sb := strings.new_builder(1024)
-		if node.u.@type == 'Program' {
+	mut sb := strings.new_builder(1024)
+	match node {
+		Program {
 			if ctx.use_print {
 				sb.writeln('#include <stdio.h>')
 			}
@@ -386,49 +363,55 @@ fn (ctx Context) code_generator_c(node ASTNode) string {
 				sb.writeln('void println(float a) {printf("%f\\n", (double)a);}')
 			}
 			sb.writeln('int main() {')
-			for e in node.program.body {
+			for e in node.body {
 				sb.write(ctx.code_generator_c(e))
 			}
 			sb.writeln('\treturn 0;')
 			sb.writeln('}')
-		} else if node.u.@type == 'NumberLiteral' {
-			sb.write(node.numberliteral.value)
-		} else if node.u.@type == 'ExpressionStatement' {
+		}
+		NumberLiteral {
+			sb.write(node.value)
+		}
+		ExpressionStatement {
 			sb.write('\t')
-			sb.write(ctx.code_generator_c(node.expressionstatement.expression))
+			sb.write(ctx.code_generator_c(node.expression))
 			sb.writeln(';')
-		} else if node.u.@type == 'Call' {
-			name := match node.call.callee.name {
-				'print' { 'println' }
-				'write' { 'println' }
+		}
+		Identifier {
+			name := match node.name {
 				'+' { 'add' }
 				'-' { 'subtract' }
 				'*' { 'multiply' }
 				'/' { 'divide' }
-				else { node.call.callee.name }
+				'print', 'write' { 'println' }
+				else { node.name }
 			}
 			sb.write(name)
+		}
+		CallExpression {
+			sb.write(ctx.code_generator_c(node.callee))
 			sb.write('(')
-			for i, e in node.call.arguments {
+			for i, e in node.arguments {
 				if i > 0 {
 					sb.write(', ')
 				}
 				sb.write(ctx.code_generator_c(e))
 			}
 			sb.write(')')
-		} else {
-			panic('Code gen Type error: `${node.u.@type}`')
 		}
-		output := sb.str()
-		sb.free()
-		return output
+		else {
+			panic('Code gen Type error: `$node.type_name()`')
+		}
 	}
+	output := sb.str()
+	unsafe { sb.free() }
+	return output
 }
 
 fn (ctx Context) code_generator_nelua(node ASTNode) string {
-	unsafe {
-		mut sb := strings.new_builder(1024)
-		if node.u.@type == 'Program' {
+	mut sb := strings.new_builder(1024)
+	match node {
+		Program {
 			if ctx.use_add {
 				sb.writeln('local function add(a: float32, b: float32): float32 return a + b end')
 			}
@@ -441,45 +424,52 @@ fn (ctx Context) code_generator_nelua(node ASTNode) string {
 			if ctx.use_divide {
 				sb.writeln('local function divide(a: float32, b: float32): float32 return a / b end')
 			}
-			for e in node.program.body {
+			for e in node.body {
 				sb.write(ctx.code_generator_nelua(e))
 			}
-		} else if node.u.@type == 'NumberLiteral' {
-			sb.write(node.numberliteral.value)
-		} else if node.u.@type == 'ExpressionStatement' {
-			sb.write(ctx.code_generator_nelua(node.expressionstatement.expression))
+		}
+		NumberLiteral {
+			sb.write(node.value)
+		}
+		ExpressionStatement {
+			sb.write(ctx.code_generator_nelua(node.expression))
 			sb.writeln('')
-		} else if node.u.@type == 'Call' {
-			name := match node.call.callee.name {
+		}
+		Identifier {
+			name := match node.name {
 				'+' { 'add' }
 				'-' { 'subtract' }
 				'*' { 'multiply' }
 				'/' { 'divide' }
 				'write' { 'print' }
-				else { node.call.callee.name }
+				else { node.name }
 			}
 			sb.write(name)
+		}
+		CallExpression {
+			sb.write(ctx.code_generator_nelua(node.callee))
 			sb.write('(')
-			for i, e in node.call.arguments {
+			for i, e in node.arguments {
 				if i > 0 {
 					sb.write(', ')
 				}
 				sb.write(ctx.code_generator_nelua(e))
 			}
 			sb.write(')')
-		} else {
-			panic('Code gen Type error: `${node.u.@type}`')
 		}
-		output := sb.str()
-		sb.free()
-		return output
+		else {
+			panic('Code gen Type error: `$node.type_name()`')
+		}
 	}
+	output := sb.str()
+	unsafe { sb.free() }
+	return output
 }
 
 fn (ctx Context) code_generator_v(node ASTNode) string {
-	unsafe {
-		mut sb := strings.new_builder(1024)
-		if node.u.@type == 'Program' {
+	mut sb := strings.new_builder(1024)
+	match node {
+		Program {
 			if ctx.use_add {
 				sb.writeln('fn add(a f32, b f32) f32 {return a + b}')
 			}
@@ -492,40 +482,46 @@ fn (ctx Context) code_generator_v(node ASTNode) string {
 			if ctx.use_divide {
 				sb.writeln('fn divide(a f32, b f32) f32 {return a / b}')
 			}
-			for e in node.program.body {
+			for e in node.body {
 				sb.write(ctx.code_generator_v(e))
 			}
-		} else if node.u.@type == 'NumberLiteral' {
-			sb.write(node.numberliteral.value)
-		} else if node.u.@type == 'ExpressionStatement' {
-			sb.write(ctx.code_generator_v(node.expressionstatement.expression))
+		}
+		NumberLiteral {
+			sb.write(node.value)
+		}
+		ExpressionStatement {
+			sb.write(ctx.code_generator_v(node.expression))
 			sb.writeln('')
-		} else if node.u.@type == 'Call' {
-			name := match node.call.callee.name {
-				'print' { 'println' }
-				'write' { 'println' }
+		}
+		Identifier {
+			name := match node.name {
 				'+' { 'add' }
 				'-' { 'subtract' }
 				'*' { 'multiply' }
 				'/' { 'divide' }
-				else { node.call.callee.name }
+				'print', 'write' { 'println' }
+				else { node.name }
 			}
 			sb.write(name)
+		}
+		CallExpression {
+			sb.write(ctx.code_generator_v(node.callee))
 			sb.write('(')
-			for i, e in node.call.arguments {
+			for i, e in node.arguments {
 				if i > 0 {
 					sb.write(', ')
 				}
 				sb.write(ctx.code_generator_v(e))
 			}
 			sb.write(')')
-		} else {
-			panic('Code gen Type error: `${node.u.@type}`')
 		}
-		output := sb.str()
-		sb.free()
-		return output
+		else {
+			panic('Code gen Type error: `$node.type_name()`')
+		}
 	}
+	output := sb.str()
+	unsafe { sb.free() }
+	return output
 }
 
 fn (mut ctx Context) compiler() string {
@@ -541,7 +537,8 @@ fn (mut ctx Context) compiler() string {
 	if 0 != flags & print_ast {
 		print_ast(ast)
 	}
-	newast := transformer(mut ast)
+	mut newast := ASTNode{}
+	ast, newast = transformer(mut &ast)
 	if 0 != flags & print_newast {
 		print_ast(newast)
 	}
