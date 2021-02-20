@@ -3,21 +3,25 @@ module main
 import strings
 import os
 
+[flag]
+enum Flags {
+	print_input
+	print_tokens
+	print_ast
+	print_newast
+	print_output
+	output_c
+	output_nelua
+	output_v
+}
+
 const (
-	print_input  = 0x01
-	print_tokens = 0x02
-	print_ast    = 0x04
-	print_newast = 0x08
-	print_output = 0x10
-	output_c     = 0x20
-	output_nelua = 0x40
-	output_v     = 0x80
-	output_mask  = output_c | output_nelua | output_v
+	output_mask = Flags.output_c | Flags.output_nelua | Flags.output_v
 )
 
 struct Context {
 mut:
-	flags        int
+	flags        Flags
 	source       string
 	input_file   string
 	output_file  string
@@ -715,34 +719,34 @@ fn (mut ctx Context) compiler() {
 	if '' != ctx.input_file {
 		ctx.source = os.read_file(ctx.input_file) or { panic("can't read $ctx.input_file") }
 	}
-	if 0 != ctx.flags & print_input {
+	if flags.has(.print_input) {
 		eprintln('input=\\\n$ctx.source')
 	}
 	tokens := ctx.tokenizer(ctx.source)
-	if 0 != flags & print_tokens {
+	if flags.has(.print_tokens) {
 		eprintln('tokens=\\\n')
 		eprint_tokens(tokens)
 	}
 	mut ast := ctx.parser(tokens)
-	if 0 != flags & print_ast {
+	if flags.has(.print_ast) {
 		eprint_ast(ast)
 	}
 	mut newast := ASTNode{}
 	ast, newast = transformer(mut &ast)
-	if 0 != flags & print_newast {
+	if flags.has(.print_newast) {
 		eprint_ast(newast)
 	}
 	mut output := ''
-	if 0 != flags & output_c {
+	if flags.has(.output_c) {
 		output = ctx.code_generator_c(newast)
 	}
-	if 0 != flags & output_nelua {
+	if flags.has(.output_nelua) {
 		output = ctx.code_generator_nelua(newast)
 	}
-	if 0 != flags & output_v {
+	if flags.has(.output_v) {
 		output = ctx.code_generator_v(newast)
 	}
-	if 0 != ctx.flags & print_output {
+	if flags.has(.print_output) {
 		// println('output=\\\n$output')
 		println('$output')
 	}
@@ -795,21 +799,24 @@ fn (mut ctx Context) set_args() {
 		} else if a == '-o' {
 			set_output_file = true
 		} else if a == '--print-input' {
-			ctx.flags |= print_input
+			ctx.flags.set(.print_input)
 		} else if a == '--print-tokens' {
-			ctx.flags |= print_tokens
+			ctx.flags.set(.print_tokens)
 		} else if a == '--print-ast' {
-			ctx.flags |= print_ast
+			ctx.flags.set(.print_ast)
 		} else if a == '--print-newast' {
-			ctx.flags |= print_newast
+			ctx.flags.set(.print_newast)
 		} else if a == '--print-output' {
-			ctx.flags |= print_output
+			ctx.flags.set(.print_output)
 		} else if a == '--output-c' {
-			ctx.flags = (ctx.flags & ~output_mask) | output_c
+			ctx.flags.clear(output_mask)
+			ctx.flags.set(.output_c)
 		} else if a == '--output-nelua' {
-			ctx.flags = (ctx.flags & ~output_mask) | output_nelua
+			ctx.flags.clear(output_mask)
+			ctx.flags.set(.output_nelua)
 		} else if a == '--output-v' {
-			ctx.flags = (ctx.flags & ~output_mask) | output_v
+			ctx.flags.clear(output_mask)
+			ctx.flags.set(.output_v)
 		} else {
 			// println('a="$a" input_file="$ctx.input_file"')
 			if '' != ctx.input_file {
@@ -819,13 +826,13 @@ fn (mut ctx Context) set_args() {
 		}
 	}
 	if '' == ctx.output_file {
-		ctx.flags |= print_output
+		ctx.flags.set(.print_output)
 	}
 }
 
 fn main() {
 	mut ctx := Context{
-		flags: 0 | 0 * print_input | 0 * print_tokens | 0 * print_ast | 0 * print_newast | 0 * print_output | 1 * output_c
+		flags: .output_c
 		source: '(write(+ (* (/ 9 5) 60) 32))'
 	}
 	ctx.set_args()
