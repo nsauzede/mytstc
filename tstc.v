@@ -155,7 +155,7 @@ fn is_space(c byte) bool {
 }
 
 fn is_number(c byte) bool {
-	return c >= `0` && c <= `9`
+	return (c >= `0` && c <= `9`) || c == `.`
 }
 
 fn is_letter(c byte) bool {
