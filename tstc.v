@@ -173,8 +173,6 @@ fn eprint_ast_r(node ASTNode, nest int) {
 }
 
 fn eprint_ast(ast ASTNode) {
-	eprintln('')
-	eprintln('ast=\\')
 	eprint_ast_r(ast, 0)
 }
 
@@ -352,14 +350,17 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 			if token0.value == '(' {
 				mut current := current_
 				current.value++
-				name := tokens[current.value] as Name
+				name := tokens[current.value]
 				current.value++
-				if name.value == 'defun' {
+				if name is Paren {
+					assert name.value == '('
 					funame := tokens[current.value] as Name
 					current.value++
+					assert funame.value == 'lambda'
 					mut node := &Defun{
 						name: funame.value
 					}
+					eprintln('checking Paren after lambda..')
 					paren := tokens[current.value] as Paren
 					assert paren.value == '('
 					current.value++
@@ -378,56 +379,133 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 						child = ctx.walk(mut &current, tokens)
 						node.arguments << child
 					}
+					eprintln('looping for lambda body')
+					mut nested_paren := 0
 					for {
 						token := tokens[current.value]
 						match token {
 							Paren {
-								if token.value == ')' {
-									current.value++
-									break
+								if token.value == '(' {
+									nested_paren++
+								} else if token.value == ')' {
+									if nested_paren <= 0 {
+										eprintln('lambda break0')
+										current.value++
+										break
+									}
+									nested_paren--
 								}
 							}
-							else {}
+							else {
+								eprintln('seen $token.type_name()')
+							}
 						}
 						mut child := &ASTNode{}
 						child = ctx.walk(mut &current, tokens)
-						node.body << child
+						if child == voidptr(0) {
+							eprintln('remotely seen a Paren) ????')
+							if nested_paren <= 0 {
+								eprintln('lambda break1')
+								current.value++
+								break
+							}
+							nested_paren--
+						} else {
+							node.body << child
+						}
 					}
+					eprintln('checking fparen..')
+					fparen := tokens[current.value]
+					if fparen is String {
+						// panic('fparen is a string ? $fparen.value')
+						eprintln('fparen is a string ???? $fparen.value')
+					} else if fparen is Paren {
+						current.value++
+						assert fparen.value == ')'
+					}
+					eprintln('done with lambda')
 					current_.value = current.value
 					return node
+				} else if name is Name {
+					if name.value == 'defun' {
+						funame := tokens[current.value] as Name
+						current.value++
+						mut node := &Defun{
+							name: funame.value
+						}
+						paren := tokens[current.value] as Paren
+						assert paren.value == '('
+						current.value++
+						for {
+							token := tokens[current.value]
+							match token {
+								Paren {
+									if token.value == ')' {
+										current.value++
+										break
+									}
+								}
+								else {}
+							}
+							mut child := &ASTNode{}
+							child = ctx.walk(mut &current, tokens)
+							node.arguments << child
+						}
+						for {
+							token := tokens[current.value]
+							match token {
+								Paren {
+									if token.value == ')' {
+										current.value++
+										break
+									}
+								}
+								else {}
+							}
+							mut child := &ASTNode{}
+							child = ctx.walk(mut &current, tokens)
+							node.body << child
+						}
+						current_.value = current.value
+						return node
+					} else {
+						match name.value {
+							'+' { ctx.use_add = true }
+							'-' { ctx.use_subtract = true }
+							'*' { ctx.use_multiply = true }
+							'/' { ctx.use_divide = true }
+							'write', 'print' { ctx.use_print = true }
+							'list' { ctx.use_list = true }
+							else {}
+						}
+						mut node := &Call{
+							name: name.value
+						}
+						for {
+							token := tokens[current.value]
+							match token {
+								Paren {
+									if token.value == ')' {
+										current.value++
+										break
+									}
+								}
+								else {}
+							}
+							mut child := &ASTNode{}
+							child = ctx.walk(mut &current, tokens)
+							node.params << child
+						}
+						current_.value = current.value
+						return node
+					}
 				} else {
-					match name.value {
-						'+' { ctx.use_add = true }
-						'-' { ctx.use_subtract = true }
-						'*' { ctx.use_multiply = true }
-						'/' { ctx.use_divide = true }
-						'write', 'print' { ctx.use_print = true }
-						'list' { ctx.use_list = true }
-						else {}
-					}
-					mut node := &Call{
-						name: name.value
-					}
-					for {
-						token := tokens[current.value]
-						match token {
-							Paren {
-								if token.value == ')' {
-									current.value++
-									break
-								}
-							}
-							else {}
-						}
-						mut child := &ASTNode{}
-						child = ctx.walk(mut &current, tokens)
-						node.params << child
-					}
-					current_.value = current.value
-					return node
+					panic('Arrgh node is not a Name or Paren(')
 				}
 			} else {
-				panic('Paren not (')
+				// panic('Paren not (')
+				eprintln('RETURNING NULL !!!')
+				return voidptr(0)
 			}
 		}
 		// else {
@@ -446,6 +524,8 @@ fn (mut ctx Context) parser(tokens []Token) ASTNode {
 		ast.body << node
 	}
 	if ctx.flags.has(.print_ast) {
+		eprintln('')
+		eprintln('ast=\\')
 		eprint_ast(ast)
 	}
 	return ast
@@ -541,6 +621,8 @@ fn (ctx Context) transformer(mut ast ASTNode) (ASTNode, ASTNode) {
 	}
 	ast = traverse_node(ast, voidptr(0))
 	if ctx.flags.has(.print_newast) {
+		eprintln('')
+		eprintln('newast=\\')
 		eprint_ast(newast)
 	}
 	return *ast, *newast
