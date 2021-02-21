@@ -526,6 +526,39 @@ fn (ctx Context) code_generator_nelua(node ASTNode) string {
 	mut sb := strings.new_builder(1024)
 	match node {
 		Program {
+			if ctx.use_obj {
+				sb.writeln("require 'vector'")
+			}
+			if ctx.use_print {
+				sb.writeln("require 'io'")
+			}
+			if ctx.use_obj {
+				sb.writeln('local ObjT = @enum {
+    u64     =0x01,
+    f32     =0x02,
+    int     =0x04,
+    string  =0x08,
+    list    =0x10,
+}
+local Obj =@record{
+    t:ObjT,
+    u:union{
+        U64:record{
+            v:uint64,
+        },
+        F32:record{
+            v:float32,
+        },
+        String:record{
+            v:string,
+        },
+        List:record{
+            v:vector(Obj),
+        },
+    }
+}
+')
+			}
 			if ctx.use_add {
 				sb.writeln('local function add(a: float32, b: float32): float32 return a + b end')
 			}
@@ -538,15 +571,52 @@ fn (ctx Context) code_generator_nelua(node ASTNode) string {
 			if ctx.use_divide {
 				sb.writeln('local function divide(a: float32, b: float32): float32 return a / b end')
 			}
+			if ctx.use_print {
+				sb.writeln('local function println_(a: Obj, depth: integer)
+    if a.t==ObjT.u64 then
+        io.stdout:write(a.u.U64.v)
+    elseif a.t==ObjT.f32 then
+        io.stdout:writef(\'%f\', a.u.F32.v)
+    elseif a.t==ObjT.string then
+        io.stdout:writef(\'"%s"\', a.u.String.v)
+    elseif a.t==ObjT.list then
+        io.stdout:write("[")
+        for i=0,<#a.u.List.v do
+            if i>0 then
+                io.stdout:write(", ")
+            end
+            println_(a.u.List.v[i], depth + 1)
+        end
+        io.stdout:write("]")
+    end
+    if depth==0 then
+        io.stdout:write("\\n")
+    end
+end
+local function println(a: Obj)
+    println_(a, 0)
+end
+')
+			}
+			if ctx.use_list {
+				sb.writeln("local function list(...: varargs): Obj
+    local r=Obj{t=ObjT.list}
+    ## for i=1,select_varargs('#') do
+        ## local argnode = select_varargs(i)
+        r.u.List.v:push(#[argnode]#)
+    ## end
+    return r
+end")
+			}
 			for e in node.body {
 				sb.write(ctx.code_generator_nelua(e))
 			}
 		}
 		NumberLiteral {
-			sb.write(node.value)
+			sb.write('Obj{t=ObjT.f32,u={F32={v=$node.value}}}')
 		}
 		StringLiteral {
-			sb.write('"$node.value"')
+			sb.write('Obj{t=ObjT.string,u={String={v="$node.value"}}}')
 		}
 		ExpressionStatement {
 			sb.write(ctx.code_generator_nelua(node.expression))
@@ -558,7 +628,7 @@ fn (ctx Context) code_generator_nelua(node ASTNode) string {
 				'-' { 'subtract' }
 				'*' { 'multiply' }
 				'/' { 'divide' }
-				'write' { 'print' }
+				'print', 'write' { 'println' }
 				else { node.name }
 			}
 			sb.write(name)
@@ -787,7 +857,7 @@ fn (mut ctx Context) set_args() {
 		if set_input {
 			set_input = false
 			ctx.source = a
-			println('Just read input="$ctx.source"')
+			// println('Just read input="$ctx.source"')
 		} else if set_output_file {
 			set_output_file = false
 			ctx.output_file = a
