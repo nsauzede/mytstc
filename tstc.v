@@ -5,6 +5,7 @@ import os
 
 [flag]
 enum Flags {
+	dtokens
 	print_input
 	print_tokens
 	print_ast
@@ -91,6 +92,8 @@ type ASTNode = Call | CallExpression | ExpressionStatement | Identifier | Number
 	Program | StringLiteral
 
 fn eprint_tokens(tokens []Token) {
+	eprintln('')
+	eprintln('tokens=\\')
 	for t in tokens {
 		eprint('$t.type_name()\t')
 		match t {
@@ -147,6 +150,8 @@ fn eprint_ast_r(node ASTNode, nest int) {
 }
 
 fn eprint_ast(ast ASTNode) {
+	eprintln('')
+	eprintln('ast=\\')
 	eprint_ast_r(ast, 0)
 }
 
@@ -166,25 +171,37 @@ fn is_alnum(c byte) bool {
 	return is_letter(c) || is_number(c)
 }
 
+fn (ctx Context) dprint(flags Flags, s string) {
+	if int(ctx.flags & flags) > 0 {
+		eprint(s)
+	}
+}
+
+fn (ctx Context) dprintln(flags Flags, s string) {
+	if int(ctx.flags & flags) > 0 {
+		eprintln(s)
+	}
+}
+
 fn (ctx Context) tokenizer(input string) []Token {
 	mut current := 0
 	mut tokens := []Token{}
 	for current < input.len {
-		// println('current=$current')
+		ctx.dprintln(.dtokens, 'current=$current')
 		mut c := input[current]
-		// println('got c=$c (${c:c})')
+		// ctx.dprintln(.dtokens,'got c=$c (${c:c})')
 		if c == `(` {
-			// println('paren(')
+			ctx.dprintln(.dtokens, 'paren(')
 			current++
 			tokens << Paren{'('}
 		} else if c == `)` {
-			// println('paren)')
+			ctx.dprintln(.dtokens, 'paren)')
 			tokens << Paren{')'}
 			current++
 		} else if is_space(c) {
 			current++
 		} else if is_number(c) {
-			// println('number')
+			ctx.dprintln(.dtokens, 'number')
 			mut value := strings.new_builder(256)
 			for is_number(c) {
 				value.write_b(c)
@@ -196,7 +213,7 @@ fn (ctx Context) tokenizer(input string) []Token {
 			}
 			tokens << Number{value.str()}
 		} else if c == `\'` {
-			// println('quote')
+			ctx.dprintln(.dtokens, 'quote')
 			mut value := strings.new_builder(256)
 			mut started := false
 			mut nested_paren := 0
@@ -206,7 +223,7 @@ fn (ctx Context) tokenizer(input string) []Token {
 					break
 				}
 				c = input[current]
-				if 0 == nested_paren && is_space(c) {
+				if 0 == nested_paren && (is_space(c) || c == `)`) {
 					if started {
 						break
 					} else {
@@ -230,7 +247,7 @@ fn (ctx Context) tokenizer(input string) []Token {
 			}
 			tokens << String{value.str()}
 		} else if c == `"` {
-			// println('doublequote')
+			ctx.dprintln(.dtokens, 'doublequote')
 			mut value := strings.new_builder(256)
 			for {
 				current++
@@ -246,7 +263,7 @@ fn (ctx Context) tokenizer(input string) []Token {
 			}
 			tokens << String{value.str()}
 		} else if is_alnum(c) {
-			// println('alnum')
+			ctx.dprintln(.dtokens, 'alnum')
 			mut value := strings.new_builder(256)
 			for is_alnum(c) {
 				value.write_b(c)
@@ -262,6 +279,9 @@ fn (ctx Context) tokenizer(input string) []Token {
 		} else {
 			panic("I don't know what this character is: `${c:c}`")
 		}
+	}
+	if ctx.flags.has(.print_tokens) {
+		eprint_tokens(tokens)
 	}
 	return tokens
 }
@@ -340,6 +360,9 @@ fn (mut ctx Context) parser(tokens []Token) ASTNode {
 		mut node := &ASTNode{}
 		node = ctx.walk(mut &current, tokens)
 		ast.body << node
+	}
+	if ctx.flags.has(.print_ast) {
+		eprint_ast(ast)
 	}
 	return ast
 }
@@ -424,12 +447,15 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 	return node
 }
 
-fn transformer(mut ast ASTNode) (ASTNode, ASTNode) {
+fn (ctx Context) transformer(mut ast ASTNode) (ASTNode, ASTNode) {
 	mut newast := &ASTNode(Program{})
 	if mut ast is Program {
 		ast.ctx = voidptr(newast)
 	}
 	ast = traverse_node(ast, voidptr(0))
+	if ctx.flags.has(.print_newast) {
+		eprint_ast(newast)
+	}
 	return *ast, *newast
 }
 
@@ -777,14 +803,14 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 			}
 		}
 		NumberLiteral {
-			sb.write('f32($node.value)')
+			sb.write('Obj(f32($node.value))')
 		}
 		StringLiteral {
 			mut delim := "'"
 			if node.value.contains("'") && !node.value.contains('"') {
 				delim = '"'
 			}
-			sb.write('$delim$node.value$delim')
+			sb.write('Obj($delim$node.value$delim)')
 		}
 		ExpressionStatement {
 			sb.write(ctx.code_generator_v(node.expression))
@@ -830,19 +856,9 @@ fn (mut ctx Context) compiler() {
 		eprintln('input=\\\n$ctx.source')
 	}
 	tokens := ctx.tokenizer(ctx.source)
-	if flags.has(.print_tokens) {
-		eprintln('tokens=\\\n')
-		eprint_tokens(tokens)
-	}
 	mut ast := ctx.parser(tokens)
-	if flags.has(.print_ast) {
-		eprint_ast(ast)
-	}
 	mut newast := ASTNode{}
-	ast, newast = transformer(mut &ast)
-	if flags.has(.print_newast) {
-		eprint_ast(newast)
-	}
+	ast, newast = ctx.transformer(mut &ast)
 	mut output := ''
 	if flags.has(.output_c) {
 		output = ctx.code_generator_c(newast)
@@ -909,6 +925,8 @@ fn (mut ctx Context) set_args() {
 			ctx.flags.set(.print_input)
 		} else if a == '--print-tokens' {
 			ctx.flags.set(.print_tokens)
+		} else if a == '--debug-tokens' {
+			ctx.flags.set(.dtokens)
 		} else if a == '--print-ast' {
 			ctx.flags.set(.print_ast)
 		} else if a == '--print-newast' {
