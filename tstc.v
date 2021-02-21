@@ -588,7 +588,7 @@ fn (ctx Context) code_generator_v(node ASTNode) string {
 	match node {
 		Program {
 			if ctx.use_obj {
-				sb.writeln('type Obj=u64|f32|int|string')
+				sb.writeln('type Obj=u64|f32|int|string|[]Obj')
 			}
 			if ctx.use_add {
 				sb.writeln("
@@ -663,7 +663,7 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 ")
 			}
 			if ctx.use_list {
-				sb.writeln('fn list(a...Obj)[]Obj{mut r:=[]Obj{}for e in a{r<<e}return r}')
+				sb.writeln('fn list(a...Obj)Obj{mut r:=Obj{}r=[]Obj{}if mut r is[]Obj{for e in a{r<<e}}return r}')
 			}
 			for e in node.body {
 				sb.write(ctx.code_generator_v(e))
