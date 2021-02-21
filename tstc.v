@@ -84,11 +84,18 @@ mut:
 	arguments []ASTNode
 }
 
+struct Defun {
+mut:
+	name      string
+	arguments []ASTNode
+	body      []ASTNode
+}
+
 struct Identifier {
 	name string
 }
 
-type ASTNode = Call | CallExpression | ExpressionStatement | Identifier | NumberLiteral |
+type ASTNode = Call | CallExpression | Defun | ExpressionStatement | Identifier | NumberLiteral |
 	Program | StringLiteral
 
 fn eprint_tokens(tokens []Token) {
@@ -142,9 +149,25 @@ fn eprint_ast_r(node ASTNode, nest int) {
 				eprint_ast_r(e, nest + 1)
 			}
 		}
-		Identifier {
+		Defun {
 			eprint('${typeof(node).name}')
 			eprint(' name=$node.name')
+			eprintln(' arguments:$node.arguments.len=\\')
+			for e in node.arguments {
+				eprint_ast_r(e, nest + 1)
+			}
+			for i := 0; i < nest + 1; i++ {
+				eprint('\t')
+			}
+			eprintln('body:$node.body.len=\\')
+			for e in node.body {
+				eprint_ast_r(e, nest + 1)
+			}
+			eprintln('')
+		}
+		Identifier {
+			eprint('${typeof(node).name}')
+			eprintln(' name=$node.name')
 		}
 	}
 }
@@ -318,47 +341,98 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 			current_.value++
 			return n
 		}
+		Name {
+			n := &Identifier{
+				name: token0.value
+			}
+			current_.value++
+			return n
+		}
 		Paren {
 			if token0.value == '(' {
 				mut current := current_
 				current.value++
 				name := tokens[current.value] as Name
 				current.value++
-				match name.value {
-					'+' { ctx.use_add = true }
-					'-' { ctx.use_subtract = true }
-					'*' { ctx.use_multiply = true }
-					'/' { ctx.use_divide = true }
-					'write', 'print' { ctx.use_print = true }
-					'list' { ctx.use_list = true }
-					else {}
-				}
-				mut node := &Call{
-					name: name.value
-				}
-				for {
-					token := tokens[current.value]
-					match token {
-						Paren {
-							if token.value == ')' {
-								break
+				if name.value == 'defun' {
+					funame := tokens[current.value] as Name
+					current.value++
+					mut node := &Defun{
+						name: funame.value
+					}
+					paren := tokens[current.value] as Paren
+					assert paren.value == '('
+					current.value++
+					for {
+						token := tokens[current.value]
+						match token {
+							Paren {
+								if token.value == ')' {
+									current.value++
+									break
+								}
 							}
+							else {}
 						}
+						mut child := &ASTNode{}
+						child = ctx.walk(mut &current, tokens)
+						node.arguments << child
+					}
+					for {
+						token := tokens[current.value]
+						match token {
+							Paren {
+								if token.value == ')' {
+									current.value++
+									break
+								}
+							}
+							else {}
+						}
+						mut child := &ASTNode{}
+						child = ctx.walk(mut &current, tokens)
+						node.body << child
+					}
+					current_.value = current.value
+					return node
+				} else {
+					match name.value {
+						'+' { ctx.use_add = true }
+						'-' { ctx.use_subtract = true }
+						'*' { ctx.use_multiply = true }
+						'/' { ctx.use_divide = true }
+						'write', 'print' { ctx.use_print = true }
+						'list' { ctx.use_list = true }
 						else {}
 					}
-					mut child := &ASTNode{}
-					child = ctx.walk(mut &current, tokens)
-					node.params << child
+					mut node := &Call{
+						name: name.value
+					}
+					for {
+						token := tokens[current.value]
+						match token {
+							Paren {
+								if token.value == ')' {
+									current.value++
+									break
+								}
+							}
+							else {}
+						}
+						mut child := &ASTNode{}
+						child = ctx.walk(mut &current, tokens)
+						node.params << child
+					}
+					current_.value = current.value
+					return node
 				}
-				current_.value = current.value + 1
-				return node
 			} else {
 				panic('Paren not (')
 			}
 		}
-		else {
-			panic('walk: Token type error: $token0')
-		}
+		// else {
+		// panic('walk: Token type error: $token0')
+		//}
 	}
 	panic('walk: Type error !')
 }
@@ -390,6 +464,9 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 				child = StringLiteral{
 					value: node.value
 				}
+			}
+			Defun {
+				child = node
 			}
 			Call {
 				mut expression := &CallExpression{
@@ -449,9 +526,9 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 				e = traverse_node(e, &node)
 			}
 		}
-		NumberLiteral, StringLiteral {}
+		NumberLiteral, StringLiteral, Defun {}
 		else {
-			panic('node is unknown ? ${typeof(node).name}')
+			panic('node is unknown ? $node.type_name()')
 		}
 	}
 	return node
@@ -848,9 +925,49 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 			}
 			sb.write(')')
 		}
-		else {
-			panic('Code gen Type error: `$node.type_name()`')
+		Call {
+			name := match node.name {
+				'+' { 'add' }
+				'-' { 'subtract' }
+				'*' { 'multiply' }
+				'/' { 'divide' }
+				'print', 'write' { 'println' }
+				else { node.name }
+			}
+			sb.write(name)
+			sb.write('(')
+			for i, e in node.params {
+				if i > 0 {
+					sb.write(', ')
+				}
+				sb.write(ctx.code_generator_v(e))
+			}
+			sb.write(')')
 		}
+		Defun {
+			sb.write('fn ')
+			sb.write(node.name)
+			sb.write('(')
+			for i, e in node.arguments {
+				if i > 0 {
+					sb.write(', ')
+				}
+				sb.write(ctx.code_generator_v(e))
+				sb.write(' Obj')
+			}
+			sb.writeln(') Obj {')
+			sb.writeln('\tmut ret := Obj{}')
+			for e in node.body {
+				sb.write('\tret = ')
+				sb.write(ctx.code_generator_v(e))
+				sb.writeln('')
+			}
+			sb.writeln('\treturn ret')
+			sb.writeln('}')
+		}
+		// else {
+		// panic('Code gen Type error: `$node.type_name()`')
+		//}
 	}
 	output := sb.str()
 	unsafe { sb.free() }
