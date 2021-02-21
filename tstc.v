@@ -164,7 +164,8 @@ fn is_number(c byte) bool {
 }
 
 fn is_letter(c byte) bool {
-	return (c >= `a` && c <= `z`) || c == `+` || c == `-` || c == `*` || c == `/`
+	return (c >= `a` && c <= `z`) || (c >= `A` && c <= `Z`) || c == `+` || c == `-`
+		|| c == `*` || c == `/`
 }
 
 fn is_alnum(c byte) bool {
@@ -187,7 +188,7 @@ fn (ctx Context) tokenizer(input string) []Token {
 	mut current := 0
 	mut tokens := []Token{}
 	for current < input.len {
-		ctx.dprintln(.dtokens, 'current=$current')
+		// ctx.dprintln(.dtokens, 'current=$current')
 		mut c := input[current]
 		// ctx.dprintln(.dtokens,'got c=$c (${c:c})')
 		if c == `(` {
@@ -196,8 +197,8 @@ fn (ctx Context) tokenizer(input string) []Token {
 			tokens << Paren{'('}
 		} else if c == `)` {
 			ctx.dprintln(.dtokens, 'paren)')
-			tokens << Paren{')'}
 			current++
+			tokens << Paren{')'}
 		} else if is_space(c) {
 			current++
 		} else if is_number(c) {
@@ -212,18 +213,19 @@ fn (ctx Context) tokenizer(input string) []Token {
 				c = input[current]
 			}
 			tokens << Number{value.str()}
-		} else if c == `\'` {
+		} else if c == `\'` || c == `\`` {
 			ctx.dprintln(.dtokens, 'quote')
 			mut value := strings.new_builder(256)
 			mut started := false
 			mut nested_paren := 0
+			mut in_dquote := false
 			for {
 				current++
 				if current >= input.len {
 					break
 				}
 				c = input[current]
-				if 0 == nested_paren && (is_space(c) || c == `)`) {
+				if 0 == nested_paren && !in_dquote && (is_space(c) || c == `)`) {
 					if started {
 						break
 					} else {
@@ -233,6 +235,14 @@ fn (ctx Context) tokenizer(input string) []Token {
 				started = true
 				if c == `(` {
 					nested_paren++
+				} else if c == `"` {
+					if in_dquote {
+						current++
+						break
+					} else {
+						in_dquote = true
+						continue
+					}
 				}
 				value.write_b(c)
 				if nested_paren > 0 {
@@ -313,9 +323,7 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 				mut current := current_
 				current.value++
 				name := tokens[current.value] as Name
-				mut node := &Call{
-					name: name.value
-				}
+				current.value++
 				match name.value {
 					'+' { ctx.use_add = true }
 					'-' { ctx.use_subtract = true }
@@ -325,7 +333,9 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 					'list' { ctx.use_list = true }
 					else {}
 				}
-				current.value++
+				mut node := &Call{
+					name: name.value
+				}
 				for {
 					token := tokens[current.value]
 					match token {
