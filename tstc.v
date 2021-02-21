@@ -587,31 +587,14 @@ fn (ctx Context) code_generator_nelua(node ASTNode) string {
 				sb.writeln("require 'io'")
 			}
 			if ctx.use_obj {
-				sb.writeln('local ObjT = @enum {
-    u64     =0x01,
-    f32     =0x02,
-    int     =0x04,
-    string  =0x08,
-    list    =0x10,
+				sb.writeln('local ObjT = @enum {u64=0x01,f32=0x02,int=0x04,string=0x08,list=0x10,
 }
-local Obj =@record{
-    t:ObjT,
-    u:union{
-        U64:record{
-            v:uint64,
-        },
-        F32:record{
-            v:float32,
-        },
-        String:record{
-            v:string,
-        },
-        List:record{
-            v:vector(Obj),
-        },
-    }
-}
-')
+local Obj =@record{t:ObjT,u:union{
+    U64:record{v:uint64,},
+    F32:record{v:float32,},
+    String:record{v:string,},
+    List:record{v:vector(Obj),},
+}}')
 			}
 			if ctx.use_add {
 				sb.writeln('local function add(a: float32, b: float32): float32 return a + b end')
@@ -667,10 +650,10 @@ end")
 			}
 		}
 		NumberLiteral {
-			sb.write('Obj{t=ObjT.f32,u={F32={v=$node.value}}}')
+			sb.write('Obj{ObjT.f32,{F32={$node.value}}}')
 		}
 		StringLiteral {
-			sb.write('Obj{t=ObjT.string,u={String={v="$node.value"}}}')
+			sb.write('Obj{ObjT.string,{String={"$node.value"}}}')
 		}
 		ExpressionStatement {
 			sb.write(ctx.code_generator_nelua(node.expression))
