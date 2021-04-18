@@ -79,9 +79,9 @@ struct Identifier {
 	name string
 }
 
-type ASTNode = Call | CallExpression | ExpressionStatement | Identifier | NumberLiteral |
-	Program | StringLiteral | EmptyAstNode
-	
+type ASTNode = Call | CallExpression | EmptyAstNode | ExpressionStatement | Identifier |
+	NumberLiteral | Program | StringLiteral
+
 struct EmptyAstNode {}
 
 fn empty_ast_node() &ASTNode {
@@ -102,7 +102,7 @@ fn print_ast_r(node ASTNode, nest int) {
 		print('\t')
 	}
 	match node {
-		EmptyAstNode{}
+		EmptyAstNode {}
 		Program {
 			print('${typeof(node).name}')
 			println(' body:$node.body.len=\\')
