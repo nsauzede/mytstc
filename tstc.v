@@ -95,8 +95,14 @@ struct Identifier {
 	name string
 }
 
-type ASTNode = Call | CallExpression | Defun | ExpressionStatement | Identifier | NumberLiteral |
-	Program | StringLiteral
+struct EmptyAstNode {}
+
+type ASTNode = Call | CallExpression | Defun | EmptyAstNode | ExpressionStatement | Identifier |
+	NumberLiteral | Program | StringLiteral
+
+fn empty_ast_node() &ASTNode {
+	return &EmptyAstNode{}
+}
 
 fn eprint_tokens(tokens []Token) {
 	eprintln('')
@@ -114,6 +120,7 @@ fn eprint_ast_r(node ASTNode, nest int) {
 		eprint('\t')
 	}
 	match node {
+		EmptyAstNode {}
 		Program {
 			eprint('${typeof(node).name}')
 			eprintln(' body:$node.body.len=\\')
@@ -374,7 +381,7 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 							}
 							else {}
 						}
-						mut child := &ASTNode{}
+						mut child := empty_ast_node()
 						child = ctx.walk(mut &current, tokens)
 						node.arguments << child
 					}
@@ -389,7 +396,7 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 							}
 							else {}
 						}
-						mut child := &ASTNode{}
+						mut child := empty_ast_node()
 						child = ctx.walk(mut &current, tokens)
 						node.body << child
 					}
@@ -419,7 +426,7 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 							}
 							else {}
 						}
-						mut child := &ASTNode{}
+						mut child := empty_ast_node()
 						child = ctx.walk(mut &current, tokens)
 						node.params << child
 					}
@@ -437,11 +444,11 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 	panic('walk: Type error !')
 }
 
-fn (mut ctx Context) parser(tokens []Token) ASTNode {
-	mut ast := Program{}
+fn (mut ctx Context) parser(tokens []Token) &ASTNode {
+	mut ast := &Program{}
 	mut current := MyInt{}
 	for current.value < tokens.len {
-		mut node := &ASTNode{}
+		mut node := empty_ast_node()
 		node = ctx.walk(mut &current, tokens)
 		ast.body << node
 	}
@@ -451,22 +458,22 @@ fn (mut ctx Context) parser(tokens []Token) ASTNode {
 	return ast
 }
 
-fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
+fn traverse_node(node &ASTNode, parent &ASTNode) &ASTNode {
 	if parent != voidptr(0) {
-		mut child := ASTNode{}
+		mut child := empty_ast_node()
 		match mut node {
 			NumberLiteral {
-				child = NumberLiteral{
+				child = &NumberLiteral{
 					value: node.value
 				}
 			}
 			StringLiteral {
-				child = StringLiteral{
+				child = &StringLiteral{
 					value: node.value
 				}
 			}
 			Defun {
-				child = node
+				child = &ASTNode(node)
 			}
 			Call {
 				mut expression := &CallExpression{
@@ -478,7 +485,7 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 				if parent is Call {
 					child = expression
 				} else {
-					child = ExpressionStatement{
+					child = &ExpressionStatement{
 						expression: expression
 					}
 				}
@@ -487,7 +494,7 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 				panic('child node is unknown ? $node.type_name()')
 			}
 		}
-		mut ctx := &ASTNode{}
+		mut ctx := empty_ast_node()
 		match mut parent {
 			Program, Call {
 				ctx = parent.ctx
@@ -518,12 +525,16 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 	match mut node {
 		Program {
 			for mut e in node.body {
-				e = traverse_node(e, &node)
+				unsafe {
+					*e = traverse_node(e, &node)
+				}
 			}
 		}
 		Call {
 			for mut e in node.params {
-				e = traverse_node(e, &node)
+				unsafe {
+					*e = traverse_node(e, &node)
+				}
 			}
 		}
 		NumberLiteral, StringLiteral, Defun {}
@@ -534,16 +545,18 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 	return node
 }
 
-fn (ctx Context) transformer(mut ast ASTNode) (ASTNode, ASTNode) {
+fn (ctx Context) transformer(mut ast ASTNode) (&ASTNode, &ASTNode) {
 	mut newast := &ASTNode(Program{})
 	if mut ast is Program {
 		ast.ctx = voidptr(newast)
 	}
-	ast = traverse_node(ast, voidptr(0))
+	unsafe {
+		*ast = traverse_node(ast, voidptr(0))
+	}
 	if ctx.flags.has(.print_newast) {
 		eprint_ast(newast)
 	}
-	return *ast, *newast
+	return ast, newast
 }
 
 fn (ctx Context) code_generator_c(node ASTNode) string {
@@ -635,20 +648,20 @@ obj list(int n, ...) {
 			}
 			sb.writeln('int main() {')
 			for e in node.body {
-				sb.write(ctx.code_generator_c(e))
+				sb.write_string(ctx.code_generator_c(e))
 			}
 			sb.writeln('\treturn 0;')
 			sb.writeln('}')
 		}
 		NumberLiteral {
-			sb.write('F($node.value)')
+			sb.write_string('F($node.value)')
 		}
 		StringLiteral {
-			sb.write('S("$node.value")')
+			sb.write_string('S("$node.value")')
 		}
 		ExpressionStatement {
-			sb.write('\t')
-			sb.write(ctx.code_generator_c(node.expression))
+			sb.write_string('\t')
+			sb.write_string(ctx.code_generator_c(node.expression))
 			sb.writeln(';')
 		}
 		Identifier {
@@ -660,25 +673,25 @@ obj list(int n, ...) {
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
 			callee := ctx.code_generator_c(node.callee)
-			sb.write(callee)
-			sb.write('(')
+			sb.write_string(callee)
+			sb.write_string('(')
 			if callee == 'list' {
-				sb.write('$node.arguments.len')
+				sb.write_string('$node.arguments.len')
 				if node.arguments.len > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
 			}
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_c(e))
+				sb.write_string(ctx.code_generator_c(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		else {
 			panic('Code gen Type error: `$node.type_name()`')
@@ -759,17 +772,17 @@ end
 end")
 			}
 			for e in node.body {
-				sb.write(ctx.code_generator_nelua(e))
+				sb.write_string(ctx.code_generator_nelua(e))
 			}
 		}
 		NumberLiteral {
-			sb.write('Obj{ObjT.f32,{F32={$node.value}}}')
+			sb.write_string('Obj{ObjT.f32,{F32={$node.value}}}')
 		}
 		StringLiteral {
-			sb.write('Obj{ObjT.string,{String={"$node.value"}}}')
+			sb.write_string('Obj{ObjT.string,{String={"$node.value"}}}')
 		}
 		ExpressionStatement {
-			sb.write(ctx.code_generator_nelua(node.expression))
+			sb.write_string(ctx.code_generator_nelua(node.expression))
 			sb.writeln('')
 		}
 		Identifier {
@@ -781,18 +794,18 @@ end")
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
-			sb.write(ctx.code_generator_nelua(node.callee))
-			sb.write('(')
+			sb.write_string(ctx.code_generator_nelua(node.callee))
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_nelua(e))
+				sb.write_string(ctx.code_generator_nelua(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		else {
 			panic('Code gen Type error: `$node.type_name()`')
@@ -806,6 +819,7 @@ end")
 fn (ctx Context) code_generator_v(node ASTNode) string {
 	mut sb := strings.new_builder(1024)
 	match node {
+		EmptyAstNode {}
 		Program {
 			if ctx.use_obj {
 				sb.writeln('type Obj=u64|f32|int|string|[]Obj')
@@ -886,21 +900,21 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 				sb.writeln('fn list(a...Obj)Obj{mut r:=Obj{}r=[]Obj{}if mut r is[]Obj{for e in a{r<<e}}return r}')
 			}
 			for e in node.body {
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string(ctx.code_generator_v(e))
 			}
 		}
 		NumberLiteral {
-			sb.write('Obj(f32($node.value))')
+			sb.write_string('Obj(f32($node.value))')
 		}
 		StringLiteral {
 			mut delim := "'"
 			if node.value.contains("'") && !node.value.contains('"') {
 				delim = '"'
 			}
-			sb.write('Obj($delim$node.value$delim)')
+			sb.write_string('Obj($delim$node.value$delim)')
 		}
 		ExpressionStatement {
-			sb.write(ctx.code_generator_v(node.expression))
+			sb.write_string(ctx.code_generator_v(node.expression))
 			sb.writeln('')
 		}
 		Identifier {
@@ -912,18 +926,18 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
-			sb.write(ctx.code_generator_v(node.callee))
-			sb.write('(')
+			sb.write_string(ctx.code_generator_v(node.callee))
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string(ctx.code_generator_v(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		Call {
 			name := match node.name {
@@ -934,32 +948,32 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
-			sb.write('(')
+			sb.write_string(name)
+			sb.write_string('(')
 			for i, e in node.params {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string(ctx.code_generator_v(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		Defun {
-			sb.write('fn ')
-			sb.write(node.name)
-			sb.write('(')
+			sb.write_string('fn ')
+			sb.write_string(node.name)
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_v(e))
-				sb.write(' Obj')
+				sb.write_string(ctx.code_generator_v(e))
+				sb.write_string(' Obj')
 			}
 			sb.writeln(') Obj {')
 			sb.writeln('\tmut ret := Obj{}')
 			for e in node.body {
-				sb.write('\tret = ')
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string('\tret = ')
+				sb.write_string(ctx.code_generator_v(e))
 				sb.writeln('')
 			}
 			sb.writeln('\treturn ret')
@@ -984,8 +998,8 @@ fn (mut ctx Context) compiler() {
 	}
 	tokens := ctx.tokenizer(ctx.source)
 	mut ast := ctx.parser(tokens)
-	mut newast := ASTNode{}
-	ast, newast = ctx.transformer(mut &ast)
+	mut newast := empty_ast_node()
+	ast, newast = ctx.transformer(mut ast)
 	mut output := ''
 	if flags.has(.output_c) {
 		output = ctx.code_generator_c(newast)
@@ -1001,10 +1015,12 @@ fn (mut ctx Context) compiler() {
 		println('$output')
 	}
 	if '' != ctx.output_file {
-		mut fout := os.create(ctx.output_file) or { os.File{
-			cfile: 0
-		} }
-		fout.write_string(output) or { }
+		mut fout := os.create(ctx.output_file) or {
+			os.File{
+				cfile: 0
+			}
+		}
+		fout.write_string(output) or {}
 		fout.close()
 	}
 }
