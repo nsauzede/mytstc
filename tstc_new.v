@@ -80,7 +80,13 @@ struct Identifier {
 }
 
 type ASTNode = Call | CallExpression | ExpressionStatement | Identifier | NumberLiteral |
-	Program | StringLiteral
+	Program | StringLiteral | EmptyAstNode
+	
+struct EmptyAstNode {}
+
+fn empty_ast_node() &ASTNode {
+	return &EmptyAstNode{}
+}
 
 fn print_tokens(tokens []Token) {
 	for t in tokens {
@@ -96,6 +102,7 @@ fn print_ast_r(node ASTNode, nest int) {
 		print('\t')
 	}
 	match node {
+		EmptyAstNode{}
 		Program {
 			print('${typeof(node).name}')
 			println(' body:$node.body.len=\\')
@@ -228,7 +235,7 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 						}
 						else {}
 					}
-					mut child := &ASTNode{}
+					mut child := empty_ast_node()
 					child = ctx.walk(mut &current, tokens)
 					node.params << child
 				}
@@ -245,11 +252,11 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 	panic('walk: Type error !')
 }
 
-fn (mut ctx Context) parser(tokens []Token) ASTNode {
-	mut ast := Program{}
+fn (mut ctx Context) parser(tokens []Token) &ASTNode {
+	mut ast := &Program{}
 	mut current := MyInt{}
 	for current.value < tokens.len {
-		mut node := &ASTNode{}
+		mut node := empty_ast_node()
 		node = ctx.walk(mut &current, tokens)
 		ast.body << node
 	}
@@ -258,10 +265,10 @@ fn (mut ctx Context) parser(tokens []Token) ASTNode {
 
 fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 	if parent != voidptr(0) {
-		mut child := ASTNode{}
+		mut child := empty_ast_node()
 		match mut node {
 			NumberLiteral {
-				child = NumberLiteral{
+				child = &NumberLiteral{
 					value: node.value
 				}
 			}
@@ -275,7 +282,7 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 				if parent is Call {
 					child = expression
 				} else {
-					child = ExpressionStatement{
+					child = &ExpressionStatement{
 						expression: expression
 					}
 				}
@@ -284,7 +291,7 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 				panic('child node is unknown ? $node.type_name()')
 			}
 		}
-		mut ctx := &ASTNode{}
+		mut ctx := empty_ast_node()
 		match mut parent {
 			Program, Call {
 				ctx = parent.ctx
@@ -331,13 +338,13 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 	return node
 }
 
-fn transformer(mut ast ASTNode) (ASTNode, ASTNode) {
+fn transformer(mut ast ASTNode) (&ASTNode, &ASTNode) {
 	mut newast := &ASTNode(Program{})
 	if mut ast is Program {
 		ast.ctx = voidptr(newast)
 	}
 	ast = traverse_node(ast, voidptr(0))
-	return *ast, *newast
+	return ast, newast
 }
 
 fn (ctx Context) code_generator_c(node ASTNode) string {
@@ -364,17 +371,17 @@ fn (ctx Context) code_generator_c(node ASTNode) string {
 			}
 			sb.writeln('int main() {')
 			for e in node.body {
-				sb.write(ctx.code_generator_c(e))
+				sb.write_string(ctx.code_generator_c(e))
 			}
 			sb.writeln('\treturn 0;')
 			sb.writeln('}')
 		}
 		NumberLiteral {
-			sb.write(node.value)
+			sb.write_string(node.value)
 		}
 		ExpressionStatement {
-			sb.write('\t')
-			sb.write(ctx.code_generator_c(node.expression))
+			sb.write_string('\t')
+			sb.write_string(ctx.code_generator_c(node.expression))
 			sb.writeln(';')
 		}
 		Identifier {
@@ -386,18 +393,18 @@ fn (ctx Context) code_generator_c(node ASTNode) string {
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
-			sb.write(ctx.code_generator_c(node.callee))
-			sb.write('(')
+			sb.write_string(ctx.code_generator_c(node.callee))
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_c(e))
+				sb.write_string(ctx.code_generator_c(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		else {
 			panic('Code gen Type error: `$node.type_name()`')
@@ -425,14 +432,14 @@ fn (ctx Context) code_generator_nelua(node ASTNode) string {
 				sb.writeln('local function divide(a: float32, b: float32): float32 return a / b end')
 			}
 			for e in node.body {
-				sb.write(ctx.code_generator_nelua(e))
+				sb.write_string(ctx.code_generator_nelua(e))
 			}
 		}
 		NumberLiteral {
-			sb.write(node.value)
+			sb.write_string(node.value)
 		}
 		ExpressionStatement {
-			sb.write(ctx.code_generator_nelua(node.expression))
+			sb.write_string(ctx.code_generator_nelua(node.expression))
 			sb.writeln('')
 		}
 		Identifier {
@@ -444,18 +451,18 @@ fn (ctx Context) code_generator_nelua(node ASTNode) string {
 				'write' { 'print' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
-			sb.write(ctx.code_generator_nelua(node.callee))
-			sb.write('(')
+			sb.write_string(ctx.code_generator_nelua(node.callee))
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_nelua(e))
+				sb.write_string(ctx.code_generator_nelua(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		else {
 			panic('Code gen Type error: `$node.type_name()`')
@@ -483,14 +490,14 @@ fn (ctx Context) code_generator_v(node ASTNode) string {
 				sb.writeln('fn divide(a f32, b f32) f32 {return a / b}')
 			}
 			for e in node.body {
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string(ctx.code_generator_v(e))
 			}
 		}
 		NumberLiteral {
-			sb.write(node.value)
+			sb.write_string(node.value)
 		}
 		ExpressionStatement {
-			sb.write(ctx.code_generator_v(node.expression))
+			sb.write_string(ctx.code_generator_v(node.expression))
 			sb.writeln('')
 		}
 		Identifier {
@@ -502,18 +509,18 @@ fn (ctx Context) code_generator_v(node ASTNode) string {
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
-			sb.write(ctx.code_generator_v(node.callee))
-			sb.write('(')
+			sb.write_string(ctx.code_generator_v(node.callee))
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string(ctx.code_generator_v(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		else {
 			panic('Code gen Type error: `$node.type_name()`')
@@ -537,8 +544,8 @@ fn (mut ctx Context) compiler() string {
 	if 0 != flags & print_ast {
 		print_ast(ast)
 	}
-	mut newast := ASTNode{}
-	ast, newast = transformer(mut &ast)
+	mut newast := empty_ast_node()
+	ast, newast = transformer(mut ast)
 	if 0 != flags & print_newast {
 		print_ast(newast)
 	}
