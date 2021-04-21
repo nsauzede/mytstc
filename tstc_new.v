@@ -78,8 +78,8 @@ mut:
 struct Identifier {
 	name string
 }
-
-type ASTNode = Call | CallExpression | ExpressionStatement | Identifier | NumberLiteral |
+struct ASTNode0{}
+type ASTNode = ASTNode0 | Call | CallExpression | ExpressionStatement | Identifier | NumberLiteral |
 	Program | StringLiteral
 
 fn print_tokens(tokens []Token) {
@@ -131,6 +131,7 @@ fn print_ast_r(node ASTNode, nest int) {
 			print('${typeof(node).name}')
 			print(' name=$node.name')
 		}
+		else{}
 	}
 }
 
@@ -228,7 +229,7 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 						}
 						else {}
 					}
-					mut child := &ASTNode{}
+					mut child := &ASTNode(&ASTNode0{})
 					child = ctx.walk(mut &current, tokens)
 					node.params << child
 				}
@@ -249,7 +250,7 @@ fn (mut ctx Context) parser(tokens []Token) ASTNode {
 	mut ast := Program{}
 	mut current := MyInt{}
 	for current.value < tokens.len {
-		mut node := &ASTNode{}
+		mut node := &ASTNode(&ASTNode0{})
 		node = ctx.walk(mut &current, tokens)
 		ast.body << node
 	}
@@ -258,7 +259,7 @@ fn (mut ctx Context) parser(tokens []Token) ASTNode {
 
 fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 	if parent != voidptr(0) {
-		mut child := ASTNode{}
+		mut child := ASTNode(ASTNode0{})
 		match mut node {
 			NumberLiteral {
 				child = NumberLiteral{
@@ -284,7 +285,7 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 				panic('child node is unknown ? $node.type_name()')
 			}
 		}
-		mut ctx := &ASTNode{}
+		mut ctx := &ASTNode(&ASTNode0{})
 		match mut parent {
 			Program, Call {
 				ctx = parent.ctx
@@ -537,7 +538,7 @@ fn (mut ctx Context) compiler() string {
 	if 0 != flags & print_ast {
 		print_ast(ast)
 	}
-	mut newast := ASTNode{}
+	mut newast := ASTNode(ASTNode0{})
 	ast, newast = transformer(mut &ast)
 	if 0 != flags & print_newast {
 		print_ast(newast)

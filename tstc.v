@@ -94,8 +94,8 @@ mut:
 struct Identifier {
 	name string
 }
-
-type ASTNode = Call | CallExpression | Defun | ExpressionStatement | Identifier | NumberLiteral |
+struct ASTNode0{}
+type ASTNode = ASTNode0 | Call | CallExpression | Defun | ExpressionStatement | Identifier | NumberLiteral |
 	Program | StringLiteral
 
 fn eprint_tokens(tokens []Token) {
@@ -169,6 +169,7 @@ fn eprint_ast_r(node ASTNode, nest int) {
 			eprint('${typeof(node).name}')
 			eprintln(' name=$node.name')
 		}
+		else{}
 	}
 }
 
@@ -374,7 +375,7 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 							}
 							else {}
 						}
-						mut child := &ASTNode{}
+						mut child := &ASTNode(&ASTNode0{})
 						child = ctx.walk(mut &current, tokens)
 						node.arguments << child
 					}
@@ -389,7 +390,7 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 							}
 							else {}
 						}
-						mut child := &ASTNode{}
+						mut child := &ASTNode(&ASTNode0{})
 						child = ctx.walk(mut &current, tokens)
 						node.body << child
 					}
@@ -419,7 +420,7 @@ fn (mut ctx Context) walk(mut current_ MyInt, tokens []Token) &ASTNode {
 							}
 							else {}
 						}
-						mut child := &ASTNode{}
+						mut child := &ASTNode(&ASTNode0{})
 						child = ctx.walk(mut &current, tokens)
 						node.params << child
 					}
@@ -441,7 +442,7 @@ fn (mut ctx Context) parser(tokens []Token) ASTNode {
 	mut ast := Program{}
 	mut current := MyInt{}
 	for current.value < tokens.len {
-		mut node := &ASTNode{}
+		mut node := &ASTNode(&ASTNode0{})
 		node = ctx.walk(mut &current, tokens)
 		ast.body << node
 	}
@@ -453,7 +454,7 @@ fn (mut ctx Context) parser(tokens []Token) ASTNode {
 
 fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 	if parent != voidptr(0) {
-		mut child := ASTNode{}
+		mut child := ASTNode(ASTNode0{})
 		match mut node {
 			NumberLiteral {
 				child = NumberLiteral{
@@ -487,7 +488,7 @@ fn traverse_node(node ASTNode, parent &ASTNode) ASTNode {
 				panic('child node is unknown ? $node.type_name()')
 			}
 		}
-		mut ctx := &ASTNode{}
+		mut ctx := &ASTNode(&ASTNode0{})
 		match mut parent {
 			Program, Call {
 				ctx = parent.ctx
@@ -965,9 +966,7 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 			sb.writeln('\treturn ret')
 			sb.writeln('}')
 		}
-		// else {
-		// panic('Code gen Type error: `$node.type_name()`')
-		//}
+		else{}
 	}
 	output := sb.str()
 	unsafe { sb.free() }
@@ -984,7 +983,7 @@ fn (mut ctx Context) compiler() {
 	}
 	tokens := ctx.tokenizer(ctx.source)
 	mut ast := ctx.parser(tokens)
-	mut newast := ASTNode{}
+	mut newast := ASTNode(ASTNode0{})
 	ast, newast = ctx.transformer(mut &ast)
 	mut output := ''
 	if flags.has(.output_c) {
