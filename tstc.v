@@ -635,20 +635,20 @@ obj list(int n, ...) {
 			}
 			sb.writeln('int main() {')
 			for e in node.body {
-				sb.write(ctx.code_generator_c(e))
+				sb.write_string(ctx.code_generator_c(e))
 			}
 			sb.writeln('\treturn 0;')
 			sb.writeln('}')
 		}
 		NumberLiteral {
-			sb.write('F($node.value)')
+			sb.write_string('F($node.value)')
 		}
 		StringLiteral {
-			sb.write('S("$node.value")')
+			sb.write_string('S("$node.value")')
 		}
 		ExpressionStatement {
-			sb.write('\t')
-			sb.write(ctx.code_generator_c(node.expression))
+			sb.write_string('\t')
+			sb.write_string(ctx.code_generator_c(node.expression))
 			sb.writeln(';')
 		}
 		Identifier {
@@ -660,25 +660,25 @@ obj list(int n, ...) {
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
 			callee := ctx.code_generator_c(node.callee)
-			sb.write(callee)
-			sb.write('(')
+			sb.write_string(callee)
+			sb.write_string('(')
 			if callee == 'list' {
-				sb.write('$node.arguments.len')
+				sb.write_string('$node.arguments.len')
 				if node.arguments.len > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
 			}
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_c(e))
+				sb.write_string(ctx.code_generator_c(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		else {
 			panic('Code gen Type error: `$node.type_name()`')
@@ -759,17 +759,17 @@ end
 end")
 			}
 			for e in node.body {
-				sb.write(ctx.code_generator_nelua(e))
+				sb.write_string(ctx.code_generator_nelua(e))
 			}
 		}
 		NumberLiteral {
-			sb.write('Obj{ObjT.f32,{F32={$node.value}}}')
+			sb.write_string('Obj{ObjT.f32,{F32={$node.value}}}')
 		}
 		StringLiteral {
-			sb.write('Obj{ObjT.string,{String={"$node.value"}}}')
+			sb.write_string('Obj{ObjT.string,{String={"$node.value"}}}')
 		}
 		ExpressionStatement {
-			sb.write(ctx.code_generator_nelua(node.expression))
+			sb.write_string(ctx.code_generator_nelua(node.expression))
 			sb.writeln('')
 		}
 		Identifier {
@@ -781,18 +781,18 @@ end")
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
-			sb.write(ctx.code_generator_nelua(node.callee))
-			sb.write('(')
+			sb.write_string(ctx.code_generator_nelua(node.callee))
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_nelua(e))
+				sb.write_string(ctx.code_generator_nelua(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		else {
 			panic('Code gen Type error: `$node.type_name()`')
@@ -886,21 +886,21 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 				sb.writeln('fn list(a...Obj)Obj{mut r:=Obj{}r=[]Obj{}if mut r is[]Obj{for e in a{r<<e}}return r}')
 			}
 			for e in node.body {
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string(ctx.code_generator_v(e))
 			}
 		}
 		NumberLiteral {
-			sb.write('Obj(f32($node.value))')
+			sb.write_string('Obj(f32($node.value))')
 		}
 		StringLiteral {
 			mut delim := "'"
 			if node.value.contains("'") && !node.value.contains('"') {
 				delim = '"'
 			}
-			sb.write('Obj($delim$node.value$delim)')
+			sb.write_string('Obj($delim$node.value$delim)')
 		}
 		ExpressionStatement {
-			sb.write(ctx.code_generator_v(node.expression))
+			sb.write_string(ctx.code_generator_v(node.expression))
 			sb.writeln('')
 		}
 		Identifier {
@@ -912,18 +912,18 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
-			sb.write(ctx.code_generator_v(node.callee))
-			sb.write('(')
+			sb.write_string(ctx.code_generator_v(node.callee))
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string(ctx.code_generator_v(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		Call {
 			name := match node.name {
@@ -934,32 +934,32 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
-			sb.write('(')
+			sb.write_string(name)
+			sb.write_string('(')
 			for i, e in node.params {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string(ctx.code_generator_v(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		Defun {
-			sb.write('fn ')
-			sb.write(node.name)
-			sb.write('(')
+			sb.write_string('fn ')
+			sb.write_string(node.name)
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_v(e))
-				sb.write(' Obj')
+				sb.write_string(ctx.code_generator_v(e))
+				sb.write_string(' Obj')
 			}
 			sb.writeln(') Obj {')
 			sb.writeln('\tmut ret := Obj{}')
 			for e in node.body {
-				sb.write('\tret = ')
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string('\tret = ')
+				sb.write_string(ctx.code_generator_v(e))
 				sb.writeln('')
 			}
 			sb.writeln('\treturn ret')

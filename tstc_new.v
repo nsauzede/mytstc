@@ -364,17 +364,17 @@ fn (ctx Context) code_generator_c(node ASTNode) string {
 			}
 			sb.writeln('int main() {')
 			for e in node.body {
-				sb.write(ctx.code_generator_c(e))
+				sb.write_string(ctx.code_generator_c(e))
 			}
 			sb.writeln('\treturn 0;')
 			sb.writeln('}')
 		}
 		NumberLiteral {
-			sb.write(node.value)
+			sb.write_string(node.value)
 		}
 		ExpressionStatement {
-			sb.write('\t')
-			sb.write(ctx.code_generator_c(node.expression))
+			sb.write_string('\t')
+			sb.write_string(ctx.code_generator_c(node.expression))
 			sb.writeln(';')
 		}
 		Identifier {
@@ -386,18 +386,18 @@ fn (ctx Context) code_generator_c(node ASTNode) string {
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
-			sb.write(ctx.code_generator_c(node.callee))
-			sb.write('(')
+			sb.write_string(ctx.code_generator_c(node.callee))
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_c(e))
+				sb.write_string(ctx.code_generator_c(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		else {
 			panic('Code gen Type error: `$node.type_name()`')
@@ -425,14 +425,14 @@ fn (ctx Context) code_generator_nelua(node ASTNode) string {
 				sb.writeln('local function divide(a: float32, b: float32): float32 return a / b end')
 			}
 			for e in node.body {
-				sb.write(ctx.code_generator_nelua(e))
+				sb.write_string(ctx.code_generator_nelua(e))
 			}
 		}
 		NumberLiteral {
-			sb.write(node.value)
+			sb.write_string(node.value)
 		}
 		ExpressionStatement {
-			sb.write(ctx.code_generator_nelua(node.expression))
+			sb.write_string(ctx.code_generator_nelua(node.expression))
 			sb.writeln('')
 		}
 		Identifier {
@@ -444,18 +444,18 @@ fn (ctx Context) code_generator_nelua(node ASTNode) string {
 				'write' { 'print' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
-			sb.write(ctx.code_generator_nelua(node.callee))
-			sb.write('(')
+			sb.write_string(ctx.code_generator_nelua(node.callee))
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_nelua(e))
+				sb.write_string(ctx.code_generator_nelua(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		else {
 			panic('Code gen Type error: `$node.type_name()`')
@@ -483,14 +483,14 @@ fn (ctx Context) code_generator_v(node ASTNode) string {
 				sb.writeln('fn divide(a f32, b f32) f32 {return a / b}')
 			}
 			for e in node.body {
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string(ctx.code_generator_v(e))
 			}
 		}
 		NumberLiteral {
-			sb.write(node.value)
+			sb.write_string(node.value)
 		}
 		ExpressionStatement {
-			sb.write(ctx.code_generator_v(node.expression))
+			sb.write_string(ctx.code_generator_v(node.expression))
 			sb.writeln('')
 		}
 		Identifier {
@@ -502,18 +502,18 @@ fn (ctx Context) code_generator_v(node ASTNode) string {
 				'print', 'write' { 'println' }
 				else { node.name }
 			}
-			sb.write(name)
+			sb.write_string(name)
 		}
 		CallExpression {
-			sb.write(ctx.code_generator_v(node.callee))
-			sb.write('(')
+			sb.write_string(ctx.code_generator_v(node.callee))
+			sb.write_string('(')
 			for i, e in node.arguments {
 				if i > 0 {
-					sb.write(', ')
+					sb.write_string(', ')
 				}
-				sb.write(ctx.code_generator_v(e))
+				sb.write_string(ctx.code_generator_v(e))
 			}
-			sb.write(')')
+			sb.write_string(')')
 		}
 		else {
 			panic('Code gen Type error: `$node.type_name()`')
