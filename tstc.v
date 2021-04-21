@@ -94,9 +94,11 @@ mut:
 struct Identifier {
 	name string
 }
-struct ASTNode0{}
-type ASTNode = ASTNode0 | Call | CallExpression | Defun | ExpressionStatement | Identifier | NumberLiteral |
-	Program | StringLiteral
+
+struct ASTNode0 {}
+
+type ASTNode = ASTNode0 | Call | CallExpression | Defun | ExpressionStatement | Identifier |
+	NumberLiteral | Program | StringLiteral
 
 fn eprint_tokens(tokens []Token) {
 	eprintln('')
@@ -169,7 +171,7 @@ fn eprint_ast_r(node ASTNode, nest int) {
 			eprint('${typeof(node).name}')
 			eprintln(' name=$node.name')
 		}
-		else{}
+		else {}
 	}
 }
 
@@ -966,7 +968,7 @@ fn divide(a...Obj)Obj{mut r:=Obj{}
 			sb.writeln('\treturn ret')
 			sb.writeln('}')
 		}
-		else{}
+		else {}
 	}
 	output := sb.str()
 	unsafe { sb.free() }
@@ -1000,10 +1002,12 @@ fn (mut ctx Context) compiler() {
 		println('$output')
 	}
 	if '' != ctx.output_file {
-		mut fout := os.create(ctx.output_file) or { os.File{
-			cfile: 0
-		} }
-		fout.write_string(output) or { }
+		mut fout := os.create(ctx.output_file) or {
+			os.File{
+				cfile: 0
+			}
+		}
+		fout.write_string(output) or {}
 		fout.close()
 	}
 }

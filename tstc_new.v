@@ -78,7 +78,9 @@ mut:
 struct Identifier {
 	name string
 }
-struct ASTNode0{}
+
+struct ASTNode0 {}
+
 type ASTNode = ASTNode0 | Call | CallExpression | ExpressionStatement | Identifier | NumberLiteral |
 	Program | StringLiteral
 
@@ -131,7 +133,7 @@ fn print_ast_r(node ASTNode, nest int) {
 			print('${typeof(node).name}')
 			print(' name=$node.name')
 		}
-		else{}
+		else {}
 	}
 }
 
